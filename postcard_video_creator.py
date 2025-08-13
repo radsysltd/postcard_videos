@@ -1016,15 +1016,15 @@ class PostcardVideoCreator:
                 "orange": (255, 165, 0)   # RGB: Red=255, Green=165, Blue=0 = Orange
             }
             
-            # Font mapping for OpenCV (limited font support)
+            # Font mapping for OpenCV (limited font support but with variety)
             font_map = {
                 "Arial": cv2.FONT_HERSHEY_SIMPLEX,
                 "Times New Roman": cv2.FONT_HERSHEY_SIMPLEX,
-                "Courier New": cv2.FONT_HERSHEY_SIMPLEX,  # Fixed: MONOSPACED doesn't exist
-                "Georgia": cv2.FONT_HERSHEY_SIMPLEX,
+                "Courier New": cv2.FONT_HERSHEY_SIMPLEX,
+                "Georgia": cv2.FONT_HERSHEY_DUPLEX,  # Different font for variety
                 "Verdana": cv2.FONT_HERSHEY_SIMPLEX,
-                "Impact": cv2.FONT_HERSHEY_SIMPLEX,
-                "Comic Sans MS": cv2.FONT_HERSHEY_SIMPLEX
+                "Impact": cv2.FONT_HERSHEY_TRIPLEX,  # Bold font for impact
+                "Comic Sans MS": cv2.FONT_HERSHEY_SCRIPT_SIMPLEX  # Script font for variety
             }
             
             # Get individual fonts for each line
@@ -1036,42 +1036,54 @@ class PostcardVideoCreator:
             
             thickness = 3
             
-            # Calculate text positions (centered, below logo) - FIXED positioning
+            # DYNAMIC VERTICAL CENTERING - Calculate total content height and center it
             logo_text_spacing = getattr(self, 'ending_logo_text_spacing_var', self.start_logo_text_spacing_var).get()
             logo_size_video = getattr(self, 'ending_logo_size_var', self.start_logo_size_var).get()
             
-            # Calculate logo position
-            logo_y = 50  # Top margin
-            
-            # Calculate text start position below logo - FIXED calculation
-            text_start_y = logo_y + logo_size_video + logo_text_spacing + 100  # 100px below logo
-            
-            # Calculate spacing for 3 lines - FIXED spacing
-            base_spacing = 80  # Fixed base spacing between lines
+            # Calculate total content height
+            logo_height = logo_size_video
             text_spacing = getattr(self, 'ending_text_spacing_var', self.start_text_spacing_var).get()
-            adjusted_spacing = base_spacing + (text_spacing * 10)  # Add spacing based on control
+            base_spacing = 80
+            adjusted_spacing = base_spacing + (text_spacing * 10)
             
-            # Ensure all 3 lines fit within video height
-            max_y = self.video_height - 100  # Leave 100px margin at bottom
-            total_height_needed = text_start_y + (adjusted_spacing * 2)
+            # Calculate text heights (approximate)
+            text_height_estimate = 50  # Approximate height for text lines
+            total_text_height = 0
+            if line1:
+                total_text_height += text_height_estimate
+            if line2:
+                total_text_height += text_height_estimate
+            if line3:
+                total_text_height += text_height_estimate
+            
+            # Add spacing between text lines
+            if line1 and line2:
+                total_text_height += adjusted_spacing
+            if line2 and line3:
+                total_text_height += adjusted_spacing
+            
+            # Total content height = logo + spacing + text
+            total_content_height = logo_height + logo_text_spacing + total_text_height
+            
+            # Calculate starting Y position to center everything
+            available_height = self.video_height - 100  # Leave 50px margins top and bottom
+            start_y = (available_height - total_content_height) // 2 + 50  # Center and add top margin
+            
+            # Logo position
+            logo_y = start_y
+            
+            # Text start position
+            text_start_y = logo_y + logo_height + logo_text_spacing
             
             print(f"DEBUG: Video dimensions: {self.video_width}x{self.video_height}")
+            print(f"DEBUG: Total content height: {total_content_height}")
+            print(f"DEBUG: Available height: {available_height}")
+            print(f"DEBUG: Centered start Y: {start_y}")
             print(f"DEBUG: Logo position: y={logo_y}, size={logo_size_video}")
             print(f"DEBUG: Text start position: {text_start_y}")
             print(f"DEBUG: Spacing: base={base_spacing}, adjusted={adjusted_spacing}")
-            print(f"DEBUG: Total height needed: {total_height_needed}, Max Y: {max_y}")
-            
-            if total_height_needed > max_y:
-                # Recalculate to fit all 3 lines
-                available_space = max_y - text_start_y
-                adjusted_spacing = available_space / 2  # Distribute space for 3 lines
-                print(f"DEBUG: ADJUSTED spacing to fit: {adjusted_spacing}")
             
             print(f"DEBUG: Final Y positions - Line1: {text_start_y}, Line2: {text_start_y + adjusted_spacing}, Line3: {text_start_y + (adjusted_spacing * 2)}")
-            
-
-            
-
             
             # Line 1
             if line1:
@@ -1213,18 +1225,40 @@ class PostcardVideoCreator:
             font = cv2.FONT_HERSHEY_SIMPLEX
             thickness = 3
             
-            # Calculate text positions (centered, below logo)
+            # DYNAMIC VERTICAL CENTERING FOR START SCREEN
             logo_text_spacing = self.start_logo_text_spacing_var.get()
             logo_size_video = self.start_logo_size_var.get()
             
-                        # Calculate logo position to match preview exactly
-            logo_y = 50  # Top margin (same as preview)
-            
-            # Calculate text start position below logo (matching preview calculation)
-            text_start_y = logo_y + logo_size_video + logo_text_spacing + (50 * 3.2)  # Scale 50 pixels from preview
-            base_line_spacing = 30 * 3.2  # Scale from preview (30) by height ratio
+            # Calculate total content height
+            logo_height = logo_size_video
             text_spacing = self.start_text_spacing_var.get()
-            adjusted_spacing = base_line_spacing + (text_spacing * 10 * 3.2)  # Scale spacing to match preview
+            base_spacing = 80
+            adjusted_spacing = base_spacing + (text_spacing * 10)
+            
+            # Calculate text heights (approximate)
+            text_height_estimate = 50  # Approximate height for text lines
+            total_text_height = 0
+            if line1 and not line1_hidden:
+                total_text_height += text_height_estimate
+            if line2:
+                total_text_height += text_height_estimate
+            
+            # Add spacing between text lines
+            if line1 and not line1_hidden and line2:
+                total_text_height += adjusted_spacing
+            
+            # Total content height = logo + spacing + text
+            total_content_height = logo_height + logo_text_spacing + total_text_height
+            
+            # Calculate starting Y position to center everything
+            available_height = self.video_height - 100  # Leave 50px margins top and bottom
+            start_y = (available_height - total_content_height) // 2 + 50  # Center and add top margin
+            
+            # Logo position
+            logo_y = start_y
+            
+            # Text start position
+            text_start_y = logo_y + logo_height + logo_text_spacing
             
             # Line 1
             if line1 and not line1_hidden:
@@ -1398,7 +1432,7 @@ class PostcardVideoCreator:
         title_label.grid(row=0, column=0, columnspan=6, pady=(0, 15))
         
         # Color and font options
-        color_options = ["white", "yellow", "red", "green", "blue", "cyan", "magenta", "brown", "orange"]
+        color_options = ["black", "white", "yellow", "red", "green", "blue", "cyan", "magenta", "brown", "orange"]
         font_options = ["Arial", "Times New Roman", "Courier New", "Georgia", "Verdana", "Impact", "Comic Sans MS"]
         
         # Line 1
@@ -1683,13 +1717,9 @@ class PostcardVideoCreator:
             width_scale = canvas_width / video_width
             height_scale = canvas_height / video_height
             
-            # Scale the line spacing proportionally
-            video_line_spacing = 100  # Same as in video
-            preview_line_spacing = int(video_line_spacing * height_scale)
-            
             # Load and display logo
             logo_path = os.path.join(os.path.dirname(__file__), "images", "logo.png")
-            logo_y_offset = 0
+            logo_size_preview = 0
             if os.path.exists(logo_path):
                 try:
                     from PIL import Image, ImageTk
@@ -1709,16 +1739,6 @@ class PostcardVideoCreator:
                     # Store reference to prevent garbage collection
                     self.logo_photo = logo_photo
                     
-                    # Calculate logo position (centered, above text)
-                    logo_x = (canvas_width - logo_size_preview) // 2
-                    logo_y = 50  # Top margin
-                    
-                    # Display logo
-                    self.start_preview_canvas.create_image(logo_x, logo_y, anchor=tk.NW, image=logo_photo)
-                    
-                    # Update text position to be below logo
-                    logo_y_offset = logo_y + logo_size_preview + logo_text_spacing
-                    
                 except Exception as e:
                     print(f"Error loading logo for preview: {e}")
             
@@ -1727,10 +1747,41 @@ class PostcardVideoCreator:
             font1_size = max(8, int(line1_size * preview_font_scale))  # Minimum size of 8
             font2_size = max(8, int(line2_size * preview_font_scale))
             
-            # Calculate text positions (below logo)
-            text_start_y = logo_y_offset + 50  # Start text below logo
-            base_line_spacing = 30  # Base spacing between lines
-            adjusted_spacing = base_line_spacing + (text_spacing * 10)  # Add spacing based on control
+            # DYNAMIC VERTICAL CENTERING FOR START PREVIEW - Same logic as video
+            logo_height = logo_size_preview
+            base_spacing = int(80 * height_scale)
+            adjusted_spacing = base_spacing + (text_spacing * int(10 * height_scale))
+            
+            # Calculate text heights (approximate)
+            text_height_estimate = int(50 * height_scale)  # Scale text height estimate
+            total_text_height = 0
+            if line1 and not line1_hidden:
+                total_text_height += text_height_estimate
+            if line2:
+                total_text_height += text_height_estimate
+            
+            # Add spacing between text lines
+            if line1 and not line1_hidden and line2:
+                total_text_height += adjusted_spacing
+            
+            # Total content height = logo + spacing + text
+            # logo_text_spacing from UI might be in a different scale, try using it directly like video does
+            total_content_height = logo_height + logo_text_spacing + total_text_height
+            
+            # Calculate starting Y position to center everything
+            available_height = canvas_height - int(100 * height_scale)  # Scale margins
+            start_y = (available_height - total_content_height) // 2 + int(50 * height_scale)  # Center and add top margin
+            
+            # Logo position
+            logo_y = start_y
+            
+            # Text start position
+            text_start_y = logo_y + logo_height + logo_text_spacing
+            
+            # Display logo at calculated position
+            if hasattr(self, 'logo_photo'):
+                logo_x = (canvas_width - logo_size_preview) // 2
+                self.start_preview_canvas.create_image(logo_x, logo_y, anchor=tk.NW, image=self.logo_photo)
             
             # Line 1
             if line1 and not line1_hidden:
@@ -1825,15 +1876,8 @@ class PostcardVideoCreator:
                     # Store reference to prevent garbage collection
                     self.ending_logo_photo = logo_photo
                     
-                    # Calculate logo position (centered, above text)
-                    logo_x = (canvas_width - logo_size_preview) // 2
-                    logo_y = 50  # Top margin
-                    
-                    # Display logo
-                    self.ending_preview_canvas.create_image(logo_x, logo_y, anchor=tk.NW, image=logo_photo)
-                    
-                    # Update text position to be below logo
-                    logo_y_offset = logo_y + logo_size_preview + logo_text_spacing
+                    # Store logo reference for later positioning
+                    self.ending_logo_photo = logo_photo
                     
                 except Exception as e:
                     print(f"Error loading logo for ending preview: {e}")
@@ -1846,10 +1890,44 @@ class PostcardVideoCreator:
             font2_size = max(8, int(line2_size * preview_font_scale))
             font3_size = max(8, int(line3_size * preview_font_scale))
             
-            # Calculate text positions (below logo) - SCALED FOR PREVIEW
-            text_start_y = logo_y_offset + int(100 * height_scale)  # Scale the 100px margin
-            base_line_spacing = int(80 * height_scale)  # Scale the 80px base spacing
-            adjusted_spacing = base_line_spacing + (text_spacing * int(10 * height_scale))  # Scale spacing control
+            # DYNAMIC VERTICAL CENTERING FOR PREVIEW - Same logic as video
+            logo_height = logo_size_preview
+            base_spacing = int(80 * height_scale)
+            adjusted_spacing = base_spacing + (text_spacing * int(10 * height_scale))
+            
+            # Calculate text heights (approximate)
+            text_height_estimate = int(50 * height_scale)  # Scale text height estimate
+            total_text_height = 0
+            if line1:
+                total_text_height += text_height_estimate
+            if line2:
+                total_text_height += text_height_estimate
+            if line3:
+                total_text_height += text_height_estimate
+            
+            # Add spacing between text lines
+            if line1 and line2:
+                total_text_height += adjusted_spacing
+            if line2 and line3:
+                total_text_height += adjusted_spacing
+            
+            # Total content height = logo + spacing + text
+            total_content_height = logo_height + logo_text_spacing + total_text_height
+            
+            # Calculate starting Y position to center everything
+            available_height = canvas_height - int(100 * height_scale)  # Scale margins
+            start_y = (available_height - total_content_height) // 2 + int(50 * height_scale)  # Center and add top margin
+            
+            # Logo position
+            logo_y = start_y
+            
+            # Text start position
+            text_start_y = logo_y + logo_height + logo_text_spacing
+            
+            # Reposition logo to centered position
+            if hasattr(self, 'ending_logo_photo'):
+                logo_x = (canvas_width - logo_size_preview) // 2
+                self.ending_preview_canvas.create_image(logo_x, logo_y, anchor=tk.NW, image=self.ending_logo_photo)
             
             # Line 1
             if line1:
