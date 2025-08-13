@@ -72,6 +72,11 @@ class PostcardVideoCreator:
         self.start_logo_text_spacing_var = tk.IntVar(value=20)
         self.start_line1_hidden_var = tk.BooleanVar(value=False)
         
+        # Ending screen configuration variables (like start screen)
+        self.ending_text_spacing_var = tk.IntVar(value=1)
+        self.ending_logo_size_var = tk.IntVar(value=300)
+        self.ending_logo_text_spacing_var = tk.IntVar(value=20)
+        
         self.setup_ui()
         
         # Load saved defaults after UI is set up
@@ -925,82 +930,193 @@ class PostcardVideoCreator:
         return transition_clip
     
     def create_ending_clip(self, duration=5):
-        """Create an ending clip with fade to black and text"""
+        """Create an ending clip with logo and text on white background (like start screen)"""
         def make_frame(t):
             import numpy as np
             import cv2
             
-            # Create black frame
-            frame = np.zeros((self.video_height, self.video_width, 3), dtype=np.uint8)
+            # Create white frame (like start screen)
+            frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 255
             
-            # Calculate fade progress (0 to 1 over duration)
-            fade_progress = min(t / duration, 1.0)
+            # No fade-in effect - show content immediately (like start screen)
+            # Add logo and text immediately (no fade effect)
             
-            # Add text with fade-in effect
-            if fade_progress > 0.2:  # Start showing text after 20% of duration
-                text_fade = min((fade_progress - 0.2) / 0.8, 1.0)  # Text fades in over remaining 80%
-                
-                # Get text lines and styling
-                line1 = self.ending_line1_var.get()
-                line2 = self.ending_line2_var.get()
-                line3 = self.ending_line3_var.get()
-                
-                # Get individual styling settings
-                line1_size = self.ending_line1_size_var.get()
-                line2_size = self.ending_line2_size_var.get()
-                line3_size = self.ending_line3_size_var.get()
-                line1_color = self.ending_line1_color_var.get()
-                line2_color = self.ending_line2_color_var.get()
-                line3_color = self.ending_line3_color_var.get()
-                line1_font = self.ending_line1_font_var.get()
-                line2_font = self.ending_line2_font_var.get()
-                line3_font = self.ending_line3_font_var.get()
-                
-                # Color mapping
-                color_map = {
-                    "white": (255, 255, 255),
-                    "yellow": (0, 255, 255),
-                    "red": (0, 0, 255),
-                    "green": (0, 255, 0),
-                    "blue": (255, 0, 0),
-                    "cyan": (255, 255, 0),
-                    "magenta": (255, 0, 255),
-                    "brown": (19, 69, 139),
-                    "orange": (0, 165, 255)
-                }
-                
-                # Font settings
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                thickness = 3
-                
-                # Calculate text positions (centered)
-                y_center = self.video_height // 2
-                line_spacing = 100
-                
-                # Line 1
-                alpha = int(255 * text_fade)
-                color1 = color_map.get(line1_color, (255, 255, 255))
-                text_color1 = (int(color1[0] * alpha / 255), int(color1[1] * alpha / 255), int(color1[2] * alpha / 255))
-                (text_width, text_height), _ = cv2.getTextSize(line1, font, line1_size, thickness)
+            # Load and display logo (same as start screen)
+            logo_path = os.path.join(os.path.dirname(__file__), "images", "logo.png")
+            if os.path.exists(logo_path):
+                try:
+                    # Load logo with alpha channel
+                    logo = cv2.imread(logo_path, cv2.IMREAD_UNCHANGED)
+                    if logo is not None:
+                        # Convert BGR to RGB for correct colors
+                        if len(logo.shape) == 3 and logo.shape[2] >= 3:
+                            logo = cv2.cvtColor(logo, cv2.COLOR_BGR2RGB)
+                        # Resize logo to user-defined size (use ending logo size if available, otherwise start logo size)
+                        logo_size_video = getattr(self, 'ending_logo_size_var', self.start_logo_size_var).get()
+                        logo = cv2.resize(logo, (logo_size_video, logo_size_video))
+                        
+                        # Calculate logo position (centered, above text)
+                        logo_x = (self.video_width - logo_size_video) // 2
+                        logo_y = 50  # Top margin (same as start screen)
+                        
+                        # No fade effect - display logo immediately
+                        
+                        # Handle different image formats
+                        if len(logo.shape) == 3 and logo.shape[2] == 4:  # Has alpha channel
+                            # Convert RGBA to RGB with alpha blending
+                            alpha_channel = logo[:, :, 3] / 255.0
+                            rgb_channels = logo[:, :, :3]
+                            
+                            # Create white background for blending
+                            white_bg = np.ones_like(rgb_channels) * 255
+                            
+                            # Blend logo with white background (no fade)
+                            blended = rgb_channels * alpha_channel[:, :, np.newaxis] + \
+                                     white_bg * (1 - alpha_channel[:, :, np.newaxis])
+                            
+                            # Place logo on frame (no fade effect)
+                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = blended.astype(np.uint8)
+                            
+                        elif len(logo.shape) == 3 and logo.shape[2] == 3:  # RGB without alpha
+                            # Place logo directly (no fade)
+                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
+                        else:
+                            # Grayscale or other format - place directly (no fade)
+                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
+                except Exception as e:
+                    print(f"Error loading logo: {e}")
+            
+            # Get text lines and styling (3 lines for ending)
+            line1 = self.ending_line1_var.get()
+            line2 = self.ending_line2_var.get()
+            line3 = self.ending_line3_var.get()
+            
+            # Get individual styling settings
+            line1_size = self.ending_line1_size_var.get()
+            line2_size = self.ending_line2_size_var.get()
+            line3_size = self.ending_line3_size_var.get()
+            line1_color = self.ending_line1_color_var.get()
+            line2_color = self.ending_line2_color_var.get()
+            line3_color = self.ending_line3_color_var.get()
+            line1_font = self.ending_line1_font_var.get()
+            line2_font = self.ending_line2_font_var.get()
+            line3_font = self.ending_line3_font_var.get()
+            
+            # Color mapping (RGB format to match preview - since frame is RGB)
+            color_map = {
+                "black": (0, 0, 0),
+                "white": (255, 255, 255),
+                "yellow": (255, 255, 0),  # RGB: Red=255, Green=255, Blue=0 = Yellow
+                "red": (255, 0, 0),       # RGB: Red=255, Green=0, Blue=0 = Red
+                "green": (0, 255, 0),     # RGB: Red=0, Green=255, Blue=0 = Green
+                "blue": (0, 0, 255),      # RGB: Red=0, Green=0, Blue=255 = Blue
+                "cyan": (0, 255, 255),    # RGB: Red=0, Green=255, Blue=255 = Cyan
+                "magenta": (255, 0, 255), # RGB: Red=255, Green=0, Blue=255 = Magenta
+                "brown": (139, 69, 19),   # RGB: Brown color
+                "orange": (255, 165, 0)   # RGB: Red=255, Green=165, Blue=0 = Orange
+            }
+            
+            # Font mapping for OpenCV (limited font support)
+            font_map = {
+                "Arial": cv2.FONT_HERSHEY_SIMPLEX,
+                "Times New Roman": cv2.FONT_HERSHEY_SIMPLEX,
+                "Courier New": cv2.FONT_HERSHEY_SIMPLEX,  # Fixed: MONOSPACED doesn't exist
+                "Georgia": cv2.FONT_HERSHEY_SIMPLEX,
+                "Verdana": cv2.FONT_HERSHEY_SIMPLEX,
+                "Impact": cv2.FONT_HERSHEY_SIMPLEX,
+                "Comic Sans MS": cv2.FONT_HERSHEY_SIMPLEX
+            }
+            
+            # Get individual fonts for each line
+            font1 = font_map.get(line1_font, cv2.FONT_HERSHEY_SIMPLEX)
+            font2 = font_map.get(line2_font, cv2.FONT_HERSHEY_SIMPLEX)
+            font3 = font_map.get(line3_font, cv2.FONT_HERSHEY_SIMPLEX)
+            
+            print(f"DEBUG: Font mapping - Line1: '{line1_font}' -> {font1}, Line2: '{line2_font}' -> {font2}, Line3: '{line3_font}' -> {font3}")
+            
+            thickness = 3
+            
+            # Calculate text positions (centered, below logo) - FIXED positioning
+            logo_text_spacing = getattr(self, 'ending_logo_text_spacing_var', self.start_logo_text_spacing_var).get()
+            logo_size_video = getattr(self, 'ending_logo_size_var', self.start_logo_size_var).get()
+            
+            # Calculate logo position
+            logo_y = 50  # Top margin
+            
+            # Calculate text start position below logo - FIXED calculation
+            text_start_y = logo_y + logo_size_video + logo_text_spacing + 100  # 100px below logo
+            
+            # Calculate spacing for 3 lines - FIXED spacing
+            base_spacing = 80  # Fixed base spacing between lines
+            text_spacing = getattr(self, 'ending_text_spacing_var', self.start_text_spacing_var).get()
+            adjusted_spacing = base_spacing + (text_spacing * 10)  # Add spacing based on control
+            
+            # Ensure all 3 lines fit within video height
+            max_y = self.video_height - 100  # Leave 100px margin at bottom
+            total_height_needed = text_start_y + (adjusted_spacing * 2)
+            
+            print(f"DEBUG: Video dimensions: {self.video_width}x{self.video_height}")
+            print(f"DEBUG: Logo position: y={logo_y}, size={logo_size_video}")
+            print(f"DEBUG: Text start position: {text_start_y}")
+            print(f"DEBUG: Spacing: base={base_spacing}, adjusted={adjusted_spacing}")
+            print(f"DEBUG: Total height needed: {total_height_needed}, Max Y: {max_y}")
+            
+            if total_height_needed > max_y:
+                # Recalculate to fit all 3 lines
+                available_space = max_y - text_start_y
+                adjusted_spacing = available_space / 2  # Distribute space for 3 lines
+                print(f"DEBUG: ADJUSTED spacing to fit: {adjusted_spacing}")
+            
+            print(f"DEBUG: Final Y positions - Line1: {text_start_y}, Line2: {text_start_y + adjusted_spacing}, Line3: {text_start_y + (adjusted_spacing * 2)}")
+            
+
+            
+
+            
+            # Line 1
+            if line1:
+                print(f"DEBUG: Drawing Line 1 - Text: '{line1}'")
+                color1 = color_map.get(line1_color, (0, 0, 0))
+                # No fade effect - use full color immediately
+                text_color1 = color1
+
+                (text_width, text_height), _ = cv2.getTextSize(line1, font1, line1_size, thickness)
                 x1 = (self.video_width - text_width) // 2
-                y1 = y_center - line_spacing
-                cv2.putText(frame, line1, (x1, y1), font, line1_size, text_color1, thickness)
-                
-                # Line 2
-                color2 = color_map.get(line2_color, (255, 255, 255))
-                text_color2 = (int(color2[0] * alpha / 255), int(color2[1] * alpha / 255), int(color2[2] * alpha / 255))
-                (text_width, text_height), _ = cv2.getTextSize(line2, font, line2_size, thickness)
+                y1 = int(text_start_y)  # Convert to integer for OpenCV
+                cv2.putText(frame, line1, (x1, y1), font1, line1_size, text_color1, thickness)
+                print(f"DEBUG: Ending Line 1 - Text: '{line1}', Color: {text_color1}, Pos: ({x1}, {y1})")
+            else:
+                print(f"DEBUG: Line 1 is empty or None")
+            
+            # Line 2
+            if line2:
+                print(f"DEBUG: Drawing Line 2 - Text: '{line2}'")
+                color2 = color_map.get(line2_color, (0, 0, 0))
+                # No fade effect - use full color immediately
+                text_color2 = color2
+
+                (text_width, text_height), _ = cv2.getTextSize(line2, font2, line2_size, thickness)
                 x2 = (self.video_width - text_width) // 2
-                y2 = y_center
-                cv2.putText(frame, line2, (x2, y2), font, line2_size, text_color2, thickness)
-                
-                # Line 3
-                color3 = color_map.get(line3_color, (255, 255, 255))
-                text_color3 = (int(color3[0] * alpha / 255), int(color3[1] * alpha / 255), int(color3[2] * alpha / 255))
-                (text_width, text_height), _ = cv2.getTextSize(line3, font, line3_size, thickness)
+                y2 = int(text_start_y + adjusted_spacing)  # Convert to integer for OpenCV
+                cv2.putText(frame, line2, (x2, y2), font2, line2_size, text_color2, thickness)
+                print(f"DEBUG: Ending Line 2 - Text: '{line2}', Color: {text_color2}, Pos: ({x2}, {y2})")
+            else:
+                print(f"DEBUG: Line 2 is empty or None")
+            
+            # Line 3
+            if line3:
+                print(f"DEBUG: Drawing Line 3 - Text: '{line3}'")
+                color3 = color_map.get(line3_color, (0, 0, 0))
+                # No fade effect - use full color immediately
+                text_color3 = color3
+
+                (text_width, text_height), _ = cv2.getTextSize(line3, font3, line3_size, thickness)
                 x3 = (self.video_width - text_width) // 2
-                y3 = y_center + line_spacing
-                cv2.putText(frame, line3, (x3, y3), font, line3_size, text_color3, thickness)
+                y3 = int(text_start_y + (adjusted_spacing * 2))  # Convert to integer for OpenCV
+                cv2.putText(frame, line3, (x3, y3), font3, line3_size, text_color3, thickness)
+                print(f"DEBUG: Ending Line 3 - Text: '{line3}', Color: {text_color3}, Pos: ({x3}, {y3})")
+            else:
+                print(f"DEBUG: Line 3 is empty or None")
             
             return frame
         
@@ -1079,18 +1195,18 @@ class PostcardVideoCreator:
             line1_font = self.start_line1_font_var.get()
             line2_font = self.start_line2_font_var.get()
             
-            # Color mapping (BGR format for OpenCV)
+            # Color mapping (RGB format to match preview - since frame is RGB)
             color_map = {
                 "black": (0, 0, 0),
                 "white": (255, 255, 255),
-                "yellow": (0, 255, 255),
-                "red": (0, 0, 255),
-                "green": (0, 255, 0),
-                "blue": (255, 0, 0),
-                "cyan": (255, 255, 0),
-                "magenta": (255, 0, 255),
-                "brown": (19, 69, 139),
-                "orange": (0, 165, 255)
+                "yellow": (255, 255, 0),  # RGB: Red=255, Green=255, Blue=0 = Yellow
+                "red": (255, 0, 0),       # RGB: Red=255, Green=0, Blue=0 = Red
+                "green": (0, 255, 0),     # RGB: Red=0, Green=255, Blue=0 = Green
+                "blue": (0, 0, 255),      # RGB: Red=0, Green=0, Blue=255 = Blue
+                "cyan": (0, 255, 255),    # RGB: Red=0, Green=255, Blue=255 = Cyan
+                "magenta": (255, 0, 255), # RGB: Red=255, Green=0, Blue=255 = Magenta
+                "brown": (139, 69, 19),   # RGB: Brown color
+                "orange": (255, 165, 0)   # RGB: Red=255, Green=165, Blue=0 = Orange
             }
             
             # Font settings
@@ -1291,19 +1407,19 @@ class PostcardVideoCreator:
         
         ttk.Label(main_frame, text="Size:").grid(row=2, column=0, sticky=tk.W, padx=(20, 5))
         ttk.Spinbox(main_frame, from_=0.5, to=3.0, increment=0.1, textvariable=self.ending_line1_size_var, 
-                   width=8, command=self.update_preview).grid(row=2, column=1, sticky=tk.W, padx=(0, 15))
+                   width=8, command=self.update_ending_preview).grid(row=2, column=1, sticky=tk.W, padx=(0, 15))
         
         ttk.Label(main_frame, text="Color:").grid(row=2, column=2, sticky=tk.W, padx=(0, 5))
         line1_color_combo = ttk.Combobox(main_frame, textvariable=self.ending_line1_color_var,
                                         values=color_options, width=10)
         line1_color_combo.grid(row=2, column=3, sticky=tk.W, padx=(0, 15))
-        line1_color_combo.bind('<<ComboboxSelected>>', lambda e: self.update_preview())
+        line1_color_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
         
         ttk.Label(main_frame, text="Font:").grid(row=2, column=4, sticky=tk.W, padx=(0, 5))
         line1_font_combo = ttk.Combobox(main_frame, textvariable=self.ending_line1_font_var,
                                        values=font_options, width=12)
         line1_font_combo.grid(row=2, column=5, sticky=tk.W)
-        line1_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_preview())
+        line1_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
         
         # Line 2
         ttk.Label(main_frame, text="Line 2:", font=('Arial', 10, 'bold')).grid(row=3, column=0, sticky=tk.W, pady=(15, 5))
@@ -1311,19 +1427,19 @@ class PostcardVideoCreator:
         
         ttk.Label(main_frame, text="Size:").grid(row=4, column=0, sticky=tk.W, padx=(20, 5))
         ttk.Spinbox(main_frame, from_=0.5, to=3.0, increment=0.1, textvariable=self.ending_line2_size_var, 
-                   width=8, command=self.update_preview).grid(row=4, column=1, sticky=tk.W, padx=(0, 15))
+                   width=8, command=self.update_ending_preview).grid(row=4, column=1, sticky=tk.W, padx=(0, 15))
         
         ttk.Label(main_frame, text="Color:").grid(row=4, column=2, sticky=tk.W, padx=(0, 5))
         line2_color_combo = ttk.Combobox(main_frame, textvariable=self.ending_line2_color_var,
                                         values=color_options, width=10)
         line2_color_combo.grid(row=4, column=3, sticky=tk.W, padx=(0, 15))
-        line2_color_combo.bind('<<ComboboxSelected>>', lambda e: self.update_preview())
+        line2_color_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
         
         ttk.Label(main_frame, text="Font:").grid(row=4, column=4, sticky=tk.W, padx=(0, 5))
         line2_font_combo = ttk.Combobox(main_frame, textvariable=self.ending_line2_font_var,
                                        values=font_options, width=12)
         line2_font_combo.grid(row=4, column=5, sticky=tk.W)
-        line2_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_preview())
+        line2_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
         
         # Line 3
         ttk.Label(main_frame, text="Line 3:", font=('Arial', 10, 'bold')).grid(row=5, column=0, sticky=tk.W, pady=(15, 5))
@@ -1331,37 +1447,52 @@ class PostcardVideoCreator:
         
         ttk.Label(main_frame, text="Size:").grid(row=6, column=0, sticky=tk.W, padx=(20, 5))
         ttk.Spinbox(main_frame, from_=0.5, to=3.0, increment=0.1, textvariable=self.ending_line3_size_var, 
-                   width=8, command=self.update_preview).grid(row=6, column=1, sticky=tk.W, padx=(0, 15))
+                   width=8, command=self.update_ending_preview).grid(row=6, column=1, sticky=tk.W, padx=(0, 15))
         
         ttk.Label(main_frame, text="Color:").grid(row=6, column=2, sticky=tk.W, padx=(0, 5))
         line3_color_combo = ttk.Combobox(main_frame, textvariable=self.ending_line3_color_var,
                                         values=color_options, width=10)
         line3_color_combo.grid(row=6, column=3, sticky=tk.W, padx=(0, 15))
-        line3_color_combo.bind('<<ComboboxSelected>>', lambda e: self.update_preview())
+        line3_color_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
         
         ttk.Label(main_frame, text="Font:").grid(row=6, column=4, sticky=tk.W, padx=(0, 5))
         line3_font_combo = ttk.Combobox(main_frame, textvariable=self.ending_line3_font_var,
                                        values=font_options, width=12)
         line3_font_combo.grid(row=6, column=5, sticky=tk.W)
-        line3_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_preview())
+        line3_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
         
         # Ending duration
         ttk.Label(main_frame, text="Duration (sec):", font=('Arial', 10, 'bold')).grid(row=7, column=0, sticky=tk.W, pady=(15, 5))
         ttk.Spinbox(main_frame, from_=1.0, to=15.0, increment=0.5, textvariable=self.ending_duration_var, 
                    width=8).grid(row=7, column=1, sticky=tk.W, pady=(15, 5))
         
+        # Text spacing
+        ttk.Label(main_frame, text="Text Spacing:", font=('Arial', 10, 'bold')).grid(row=7, column=2, sticky=tk.W, pady=(15, 5), padx=(20, 5))
+        ttk.Spinbox(main_frame, from_=0, to=10, increment=1, textvariable=self.ending_text_spacing_var, 
+                   width=8, command=self.update_ending_preview).grid(row=7, column=3, sticky=tk.W, pady=(15, 5))
+        
+        # Logo size
+        ttk.Label(main_frame, text="Logo Size:", font=('Arial', 10, 'bold')).grid(row=7, column=4, sticky=tk.W, pady=(15, 5), padx=(20, 5))
+        ttk.Spinbox(main_frame, from_=100, to=600, increment=25, textvariable=self.ending_logo_size_var, 
+                   width=8, command=self.update_ending_preview).grid(row=7, column=5, sticky=tk.W, pady=(15, 5))
+        
+        # Logo-text spacing
+        ttk.Label(main_frame, text="Logo-Text Spacing:", font=('Arial', 10, 'bold')).grid(row=8, column=0, sticky=tk.W, pady=(15, 5))
+        ttk.Spinbox(main_frame, from_=0, to=200, increment=10, textvariable=self.ending_logo_text_spacing_var, 
+                   width=8, command=self.update_ending_preview).grid(row=8, column=1, sticky=tk.W, pady=(15, 5))
+        
         # Preview section
         preview_frame = ttk.LabelFrame(main_frame, text="Live Preview", padding="10")
-        preview_frame.grid(row=8, column=0, columnspan=6, pady=(15, 10), sticky=(tk.W, tk.E))
+        preview_frame.grid(row=9, column=0, columnspan=6, pady=(15, 10), sticky=(tk.W, tk.E))
         
-        # Preview canvas (black background to simulate video)
+        # Preview canvas (white background to simulate ending screen)
         # Use 16:9 aspect ratio to match video
-        self.preview_canvas = tk.Canvas(preview_frame, width=600, height=338, bg='black')
-        self.preview_canvas.grid(row=0, column=0, pady=(0, 10))
+        self.ending_preview_canvas = tk.Canvas(preview_frame, width=600, height=338, bg='white')
+        self.ending_preview_canvas.grid(row=0, column=0, pady=(0, 10))
         
         # Buttons frame
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=9, column=0, columnspan=6, pady=(10, 5))
+        button_frame.grid(row=10, column=0, columnspan=6, pady=(10, 5))
         
         # Save as default button
         save_button = ttk.Button(button_frame, text="💾 Save as Default", 
@@ -1374,15 +1505,15 @@ class PostcardVideoCreator:
         
         # Status label
         self.dialog_status_label = ttk.Label(main_frame, text="", foreground="green")
-        self.dialog_status_label.grid(row=10, column=0, columnspan=6, pady=(5, 0))
+        self.dialog_status_label.grid(row=11, column=0, columnspan=6, pady=(5, 0))
         
         # Bind text changes to preview updates
-        self.ending_line1_var.trace('w', lambda *args: self.update_preview())
-        self.ending_line2_var.trace('w', lambda *args: self.update_preview())
-        self.ending_line3_var.trace('w', lambda *args: self.update_preview())
+        self.ending_line1_var.trace('w', lambda *args: self.update_ending_preview())
+        self.ending_line2_var.trace('w', lambda *args: self.update_ending_preview())
+        self.ending_line3_var.trace('w', lambda *args: self.update_ending_preview())
         
         # Initial preview
-        self.update_preview()
+        self.update_ending_preview()
     
     def open_start_config(self):
         """Open start text configuration dialog"""
@@ -1623,6 +1754,127 @@ class PostcardVideoCreator:
         except Exception as e:
             print(f"Start preview update error: {e}")
     
+    def update_ending_preview(self):
+        """Update the live preview of the ending text (like start screen but with 3 lines)"""
+        try:
+            # Clear the canvas
+            self.ending_preview_canvas.delete("all")
+            
+            # Get current values
+            line1 = self.ending_line1_var.get()
+            line2 = self.ending_line2_var.get()
+            line3 = self.ending_line3_var.get()
+            line1_size = self.ending_line1_size_var.get()
+            line2_size = self.ending_line2_size_var.get()
+            line3_size = self.ending_line3_size_var.get()
+            line1_color = self.ending_line1_color_var.get()
+            line2_color = self.ending_line2_color_var.get()
+            line3_color = self.ending_line3_color_var.get()
+            line1_font = self.ending_line1_font_var.get()
+            line2_font = self.ending_line2_font_var.get()
+            line3_font = self.ending_line3_font_var.get()
+            text_spacing = self.ending_text_spacing_var.get()
+            logo_size = self.ending_logo_size_var.get()
+            logo_text_spacing = self.ending_logo_text_spacing_var.get()
+            
+            # Color mapping (same as start screen)
+            color_map = {
+                "black": "#000000",
+                "white": "#FFFFFF",
+                "yellow": "#FFFF00",
+                "red": "#FF0000",
+                "green": "#00FF00",
+                "blue": "#0000FF",
+                "cyan": "#00FFFF",
+                "magenta": "#FF00FF",
+                "brown": "#8B4513",
+                "orange": "#FFA500"
+            }
+            
+            # Canvas dimensions (preview size)
+            canvas_width = 600
+            canvas_height = 338
+            
+            # Video dimensions (actual output)
+            video_width = 1920
+            video_height = 1080
+            
+            # Calculate scaling factors
+            width_scale = canvas_width / video_width
+            height_scale = canvas_height / video_height
+            
+            # Load and display logo (same as start screen)
+            logo_path = os.path.join(os.path.dirname(__file__), "images", "logo.png")
+            logo_y_offset = 0
+            if os.path.exists(logo_path):
+                try:
+                    from PIL import Image, ImageTk
+                    # Load logo with PIL
+                    logo_pil = Image.open(logo_path)
+                    
+                    # Calculate logo size for preview (proportional to video)
+                    logo_size_video = logo_size  # Use the variable size
+                    logo_size_preview = int(logo_size_video * height_scale)
+                    
+                    # Resize logo for preview
+                    logo_pil = logo_pil.resize((logo_size_preview, logo_size_preview), Image.Resampling.LANCZOS)
+                    
+                    # Convert to PhotoImage
+                    logo_photo = ImageTk.PhotoImage(logo_pil)
+                    
+                    # Store reference to prevent garbage collection
+                    self.ending_logo_photo = logo_photo
+                    
+                    # Calculate logo position (centered, above text)
+                    logo_x = (canvas_width - logo_size_preview) // 2
+                    logo_y = 50  # Top margin
+                    
+                    # Display logo
+                    self.ending_preview_canvas.create_image(logo_x, logo_y, anchor=tk.NW, image=logo_photo)
+                    
+                    # Update text position to be below logo
+                    logo_y_offset = logo_y + logo_size_preview + logo_text_spacing
+                    
+                except Exception as e:
+                    print(f"Error loading logo for ending preview: {e}")
+            else:
+                print(f"Logo file not found at {logo_path}")
+            
+            # Calculate font sizes proportionally
+            preview_font_scale = int(25 * height_scale)  # Scale based on height ratio
+            font1_size = max(8, int(line1_size * preview_font_scale))  # Minimum size of 8
+            font2_size = max(8, int(line2_size * preview_font_scale))
+            font3_size = max(8, int(line3_size * preview_font_scale))
+            
+            # Calculate text positions (below logo) - SCALED FOR PREVIEW
+            text_start_y = logo_y_offset + int(100 * height_scale)  # Scale the 100px margin
+            base_line_spacing = int(80 * height_scale)  # Scale the 80px base spacing
+            adjusted_spacing = base_line_spacing + (text_spacing * int(10 * height_scale))  # Scale spacing control
+            
+            # Line 1
+            if line1:
+                color1 = color_map.get(line1_color, "#000000")
+                y1 = text_start_y
+                self.ending_preview_canvas.create_text(canvas_width//2, y1, text=line1, 
+                                              fill=color1, font=(line1_font, font1_size, 'bold'))
+            
+            # Line 2
+            if line2:
+                color2 = color_map.get(line2_color, "#000000")
+                y2 = text_start_y + adjusted_spacing
+                self.ending_preview_canvas.create_text(canvas_width//2, y2, text=line2, 
+                                              fill=color2, font=(line2_font, font2_size, 'bold'))
+            
+            # Line 3
+            if line3:
+                color3 = color_map.get(line3_color, "#000000")
+                y3 = text_start_y + (adjusted_spacing * 2)
+                self.ending_preview_canvas.create_text(canvas_width//2, y3, text=line3, 
+                                              fill=color3, font=(line3_font, font3_size, 'bold'))
+                
+        except Exception as e:
+            print(f"Ending preview update error: {e}")
+    
     def save_start_defaults_and_close(self, dialog):
         """Save current start settings as defaults and close the dialog"""
         try:
@@ -1763,6 +2015,21 @@ class PostcardVideoCreator:
             import json
             
             defaults = {
+                # Start screen settings
+                "start_line1": self.start_line1_var.get(),
+                "start_line2": self.start_line2_var.get(),
+                "start_line1_size": self.start_line1_size_var.get(),
+                "start_line2_size": self.start_line2_size_var.get(),
+                "start_line1_color": self.start_line1_color_var.get(),
+                "start_line2_color": self.start_line2_color_var.get(),
+                "start_line1_font": self.start_line1_font_var.get(),
+                "start_line2_font": self.start_line2_font_var.get(),
+                "start_duration": self.start_duration_var.get(),
+                "start_text_spacing": self.start_text_spacing_var.get(),
+                "start_logo_size": self.start_logo_size_var.get(),
+                "start_logo_text_spacing": self.start_logo_text_spacing_var.get(),
+                "start_line1_hidden": self.start_line1_hidden_var.get(),
+                # Ending screen settings
                 "ending_line1": self.ending_line1_var.get(),
                 "ending_line2": self.ending_line2_var.get(),
                 "ending_line3": self.ending_line3_var.get(),
@@ -1775,6 +2042,11 @@ class PostcardVideoCreator:
                 "ending_line1_font": self.ending_line1_font_var.get(),
                 "ending_line2_font": self.ending_line2_font_var.get(),
                 "ending_line3_font": self.ending_line3_font_var.get(),
+                "ending_duration": self.ending_duration_var.get(),
+                "ending_text_spacing": self.ending_text_spacing_var.get(),
+                "ending_logo_size": self.ending_logo_size_var.get(),
+                "ending_logo_text_spacing": self.ending_logo_text_spacing_var.get(),
+                # General settings
                 "default_duration": self.default_duration_var.get(),
                 "transition_duration": self.transition_duration_var.get(),
                 "effect": self.effect_var.get(),
@@ -1835,6 +2107,9 @@ class PostcardVideoCreator:
                 self.ending_line2_font_var.set(defaults.get("ending_line2_font", "Arial"))
                 self.ending_line3_font_var.set(defaults.get("ending_line3_font", "Arial"))
                 self.ending_duration_var.set(defaults.get("ending_duration", 5.0))
+                self.ending_text_spacing_var.set(defaults.get("ending_text_spacing", 1))
+                self.ending_logo_size_var.set(defaults.get("ending_logo_size", 300))
+                self.ending_logo_text_spacing_var.set(defaults.get("ending_logo_text_spacing", 20))
                 
                 # Load other settings
                 self.default_duration_var.set(defaults.get("default_duration", 4))
