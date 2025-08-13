@@ -1,4 +1,22 @@
 {
+  "start_line1": "Lincoln Rare Books & Collectables",
+  "start_line2": "Postcards of Lincolnshire",
+  "start_line1_size": 1.5,
+  "start_line2_size": 2.6,
+  "start_line1_color": "black",
+  "start_line2_color": "brown",
+  "start_line1_font": "Arial",
+  "start_line2_font": "Verdana",
+  "start_duration": 15.0,
+  "start_text_spacing": 1,
+  "start_logo_size": 600,
+  "start_logo_text_spacing": 0,
+  "start_line1_hidden": true,
+  "default_duration": "4",
+  "transition_duration": "1.0",
+  "effect": "random",
+  "music": "None",
+  "music_volume": 0.3,
   "ending_line1": "Lincoln Rare Books & Collectables",
   "ending_line2": "Check Out Our Huge Collection of Postcards In-store!",
   "ending_line3": "Please LIKE and SUBSCRIBE!",
@@ -11,9 +29,5 @@
   "ending_line1_font": "Arial",
   "ending_line2_font": "Arial",
   "ending_line3_font": "Arial",
-  "default_duration": "4",
-  "transition_duration": "1.0",
-  "effect": "random",
-  "music": "None",
-  "music_volume": 0.3
+  "ending_duration": 5.0
 }
