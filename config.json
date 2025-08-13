@@ -1,0 +1,20 @@
+{
+    "video_settings": {
+        "front_duration": 10,
+        "back_duration": 5,
+        "transition_duration": 1.0,
+        "resolution": "1920x1080",
+        "transition_effect": "fade",
+        "fps": 30
+    },
+    "output_settings": {
+        "codec": "libx264",
+        "audio_codec": "aac",
+        "temp_audiofile": "temp-audio.m4a",
+        "remove_temp": true
+    },
+    "effects": {
+        "zoom_factor": 0.1,
+        "slide_speed": 1.0
+    }
+} 

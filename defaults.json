@@ -1,0 +1,19 @@
+{
+  "ending_line1": "Lincoln Rare Books & Collectables",
+  "ending_line2": "Check Out Our Huge Collection of Postcards In-store!",
+  "ending_line3": "Please LIKE and SUBSCRIBE!",
+  "ending_line1_size": 2.7,
+  "ending_line2_size": 1.5,
+  "ending_line3_size": 1.7,
+  "ending_line1_color": "yellow",
+  "ending_line2_color": "white",
+  "ending_line3_color": "cyan",
+  "ending_line1_font": "Arial",
+  "ending_line2_font": "Arial",
+  "ending_line3_font": "Arial",
+  "default_duration": "4",
+  "transition_duration": "1.0",
+  "effect": "random",
+  "music": "None",
+  "music_volume": 0.3
+}

@@ -1,0 +1,6 @@
+opencv-python
+moviepy
+Pillow
+numpy
+pygame
+requests 
