@@ -6,7 +6,20 @@ import time
 from PIL import Image, ImageTk
 import cv2
 from moviepy import *
-from moviepy.video.fx import Resize, FadeIn, FadeOut
+try:
+    # Preferred: import specific fx modules (works across common versions)
+    from moviepy.video.fx.fadein import fadein as vfx_fadein
+    from moviepy.video.fx.fadeout import fadeout as vfx_fadeout
+except Exception:
+    try:
+        # Alternate aggregator path
+        from moviepy.video.fx.all import fadein as vfx_fadein, fadeout as vfx_fadeout
+    except Exception:
+        # Last-resort no-op functions to avoid import crashes
+        def vfx_fadein(clip, duration):
+            return clip
+        def vfx_fadeout(clip, duration):
+            return clip
 import numpy as np
 from datetime import datetime
 import json
@@ -15,7 +28,11 @@ class PostcardVideoCreator:
     def __init__(self, root):
         self.root = root
         self.root.title("Postcard Video Creator")
-        self.root.geometry("1200x800")
+        # Start maximized for better layout; fallback size if not supported
+        try:
+            self.root.state('zoomed')
+        except Exception:
+            self.root.geometry("1400x900")
         self.root.configure(bg='#f0f0f0')
         
         # Variables
@@ -42,6 +59,16 @@ class PostcardVideoCreator:
         self.transition_duration = 1.0  # seconds
         self.video_width = 1920
         self.video_height = 1080
+
+        # Global fade options
+        self.start_fade_in_var = tk.BooleanVar(value=False)
+        self.start_fade_out_var = tk.BooleanVar(value=False)
+        self.start_fade_in_dur_var = tk.DoubleVar(value=0.5)
+        self.start_fade_out_dur_var = tk.DoubleVar(value=0.5)
+        self.ending_fade_in_var = tk.BooleanVar(value=False)
+        self.ending_fade_out_var = tk.BooleanVar(value=False)
+        self.ending_fade_in_dur_var = tk.DoubleVar(value=0.5)
+        self.ending_fade_out_dur_var = tk.DoubleVar(value=0.5)
         
         # Ending text variables
         self.ending_line1_var = tk.StringVar(value="Lincoln Rare Books & Collectables")
@@ -81,6 +108,11 @@ class PostcardVideoCreator:
         self.ending_line1_hidden_var = tk.BooleanVar(value=False)
         self.ending_line2_hidden_var = tk.BooleanVar(value=False)
         self.ending_line3_hidden_var = tk.BooleanVar(value=False)
+        # Ending extra image options
+        self.ending_image_enabled_var = tk.BooleanVar(value=False)
+        self.ending_image_path_var = tk.StringVar(value="")
+        self.ending_image_height_var = tk.IntVar(value=200)
+        self.ending_image_spacing_var = tk.IntVar(value=20)
         
         self.setup_ui()
         
@@ -949,6 +981,7 @@ class PostcardVideoCreator:
         def make_frame(t):
             import numpy as np
             import cv2
+            from PIL import Image
             
             # Create white frame (like start screen)
             frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 255
@@ -1031,6 +1064,17 @@ class PostcardVideoCreator:
                 total_text_height += adjusted_spacing
             if (line2 and not line2_hidden) and (line3 and not line3_hidden):
                 total_text_height += adjusted_spacing
+
+            # Extra image contribution (video sizing is unscaled)
+            extra_image_enabled = self.ending_image_enabled_var.get()
+            extra_image_path = self.ending_image_path_var.get()
+            extra_image_spacing = self.ending_image_spacing_var.get()
+            extra_image_height = self.ending_image_height_var.get()
+            include_extra_image = (
+                extra_image_enabled and extra_image_path and os.path.exists(extra_image_path)
+            )
+            if include_extra_image:
+                total_text_height += extra_image_spacing + extra_image_height
             
             # Total content height = logo + spacing + text
             total_content_height = logo_height + logo_text_spacing + total_text_height
@@ -1150,11 +1194,48 @@ class PostcardVideoCreator:
                 print(f"DEBUG: Ending Line 3 - Text: '{line3}', Color: {text_color3}, Pos: ({x3}, {y3})")
             else:
                 print(f"DEBUG: Line 3 is empty or None")
+
+            # Extra image rendering (after last visible text line)
+            if include_extra_image:
+                try:
+                    pil_img = Image.open(extra_image_path)
+                    w, h = pil_img.size
+                    if h <= 0:
+                        h = 1
+                    new_h = max(1, int(extra_image_height))
+                    new_w = int(w * (new_h / h))
+                    pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                    rgb_img = np.array(pil_img.convert('RGB'))
+                    last_y = text_start_y
+                    visible_offset = 0
+                    if line1 and not line1_hidden:
+                        visible_offset += 1
+                    if line2 and not line2_hidden:
+                        last_y = int(text_start_y + adjusted_spacing)
+                        visible_offset += 1
+                    if line3 and not line3_hidden:
+                        last_y = int(text_start_y + (adjusted_spacing * max(visible_offset, 0)))
+                    extra_y = int(last_y + extra_image_spacing)
+                    extra_x = (self.video_width - new_w) // 2
+                    frame[extra_y:extra_y + new_h, extra_x:extra_x + new_w] = rgb_img
+                except Exception as e:
+                    print(f"Ending video extra image error: {e}")
             
             return frame
         
         from moviepy import VideoClip
         ending_clip = VideoClip(make_frame, duration=duration)
+        # Apply fade effects if enabled
+        if self.ending_fade_in_var.get():
+            try:
+                ending_clip = vfx_fadein(ending_clip, self.ending_fade_in_dur_var.get())
+            except Exception as _:
+                pass
+        if self.ending_fade_out_var.get():
+            try:
+                ending_clip = vfx_fadeout(ending_clip, self.ending_fade_out_dur_var.get())
+            except Exception as _:
+                pass
         return ending_clip
     
     def create_start_clip(self, duration=3):
@@ -1302,6 +1383,17 @@ class PostcardVideoCreator:
         
         from moviepy import VideoClip
         start_clip = VideoClip(make_frame, duration=duration)
+        # Apply fade effects if enabled
+        if self.start_fade_in_var.get():
+            try:
+                start_clip = vfx_fadein(start_clip, self.start_fade_in_dur_var.get())
+            except Exception as _:
+                pass
+        if self.start_fade_out_var.get():
+            try:
+                start_clip = vfx_fadeout(start_clip, self.start_fade_out_dur_var.get())
+            except Exception as _:
+                pass
         return start_clip
             
     def show_success_message(self, output_path, minutes, seconds):
@@ -1435,7 +1527,12 @@ class PostcardVideoCreator:
                 "transition_duration": self.transition_duration_var.get(),
                 "effect": self.effect_var.get(),
                 "music": self.music_var.get(),
-                "music_volume": self.music_volume_var.get()
+                "music_volume": self.music_volume_var.get(),
+                # Ending extra image
+                "ending_image_enabled": self.ending_image_enabled_var.get(),
+                "ending_image_path": self.ending_image_path_var.get(),
+                "ending_image_height": self.ending_image_height_var.get(),
+                "ending_image_spacing": self.ending_image_spacing_var.get()
             }
             
             with open('defaults.json', 'w') as f:
@@ -1456,128 +1553,185 @@ class PostcardVideoCreator:
         """Open ending text configuration dialog"""
         dialog = tk.Toplevel(self.root)
         dialog.title("Configure Ending Text")
-        dialog.geometry("900x750")
-        dialog.resizable(False, False)
+        dialog.geometry("1000x720")
+        dialog.resizable(True, True)
         dialog.transient(self.root)
         dialog.grab_set()
         
-        # Center the dialog
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (900 // 2)
-        y = (dialog.winfo_screenheight() // 2) - (750 // 2)
-        dialog.geometry(f"900x750+{x}+{y}")
+        # Maximize window when supported; otherwise center
+        try:
+            dialog.state('zoomed')  # Windows
+        except Exception:
+            dialog.update_idletasks()
+            x = (dialog.winfo_screenwidth() // 2) - (1000 // 2)
+            y = (dialog.winfo_screenheight() // 2) - (720 // 2)
+            dialog.geometry(f"1000x720+{x}+{y}")
         
         # Main frame
-        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame = ttk.Frame(dialog, padding="16")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
         
         # Title
         title_label = ttk.Label(main_frame, text="Ending Text Configuration", 
                                font=('Arial', 14, 'bold'))
-        title_label.grid(row=0, column=0, columnspan=6, pady=(0, 15))
+        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
+
+        # Two columns: left for form, right for preview and extra image
+        left_col = ttk.Frame(main_frame)
+        left_col.grid(row=1, column=0, sticky=(tk.N, tk.W, tk.E))
+        left_col.columnconfigure(0, weight=1)
+        left_col.columnconfigure(1, weight=1)
+        left_col.columnconfigure(2, weight=1)
+        left_col.columnconfigure(3, weight=1)
+        right_col = ttk.Frame(main_frame)
+        right_col.grid(row=1, column=1, sticky=(tk.N, tk.W, tk.E))
+        right_col.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(1, weight=1)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
         
         # Color and font options
         color_options = ["black", "white", "yellow", "red", "green", "blue", "cyan", "magenta", "brown", "orange"]
         font_options = ["Arial", "Times New Roman", "Courier New", "Georgia", "Verdana", "Impact", "Comic Sans MS"]
         
         # Line 1
-        ttk.Label(main_frame, text="Line 1:", font=('Arial', 10, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
-        ttk.Entry(main_frame, textvariable=self.ending_line1_var, width=40).grid(row=1, column=1, columnspan=4, sticky=tk.W, pady=(0, 5))
-        ttk.Checkbutton(main_frame, text="Hide", variable=self.ending_line1_hidden_var,
-                        command=self.update_ending_preview).grid(row=1, column=5, sticky=tk.W, pady=(0, 5))
+        ttk.Label(left_col, text="Line 1:", font=('Arial', 10, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=(0, 4))
+        ttk.Entry(left_col, textvariable=self.ending_line1_var, width=34).grid(row=0, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 4))
+        ttk.Checkbutton(left_col, text="Hide", variable=self.ending_line1_hidden_var,
+                        command=self.update_ending_preview).grid(row=0, column=3, sticky=tk.W, pady=(0, 4))
         
-        ttk.Label(main_frame, text="Size:").grid(row=2, column=0, sticky=tk.W, padx=(20, 5))
-        ttk.Spinbox(main_frame, from_=0.5, to=3.0, increment=0.1, textvariable=self.ending_line1_size_var, 
-                   width=8, command=self.update_ending_preview).grid(row=2, column=1, sticky=tk.W, padx=(0, 15))
-        
-        ttk.Label(main_frame, text="Color:").grid(row=2, column=2, sticky=tk.W, padx=(0, 5))
-        line1_color_combo = ttk.Combobox(main_frame, textvariable=self.ending_line1_color_var,
+        ttk.Label(left_col, text="Size:").grid(row=1, column=0, sticky=tk.W)
+        ttk.Spinbox(left_col, from_=0.5, to=3.0, increment=0.1, textvariable=self.ending_line1_size_var, 
+                   width=8, command=self.update_ending_preview).grid(row=1, column=1, sticky=tk.W, padx=(0, 8))
+        ttk.Label(left_col, text="Color:").grid(row=1, column=2, sticky=tk.W)
+        line1_color_combo = ttk.Combobox(left_col, textvariable=self.ending_line1_color_var,
                                         values=color_options, width=10)
-        line1_color_combo.grid(row=2, column=3, sticky=tk.W, padx=(0, 15))
+        line1_color_combo.grid(row=1, column=3, sticky=tk.W)
         line1_color_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
-        
-        ttk.Label(main_frame, text="Font:").grid(row=2, column=4, sticky=tk.W, padx=(0, 5))
-        line1_font_combo = ttk.Combobox(main_frame, textvariable=self.ending_line1_font_var,
-                                       values=font_options, width=12)
-        line1_font_combo.grid(row=2, column=5, sticky=tk.W)
+        ttk.Label(left_col, text="Font:").grid(row=2, column=0, sticky=tk.W)
+        line1_font_combo = ttk.Combobox(left_col, textvariable=self.ending_line1_font_var,
+                                       values=font_options, width=14)
+        line1_font_combo.grid(row=2, column=1, columnspan=3, sticky=(tk.W, tk.E))
         line1_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
         
         # Line 2
-        ttk.Label(main_frame, text="Line 2:", font=('Arial', 10, 'bold')).grid(row=3, column=0, sticky=tk.W, pady=(15, 5))
-        ttk.Entry(main_frame, textvariable=self.ending_line2_var, width=40).grid(row=3, column=1, columnspan=4, sticky=tk.W, pady=(15, 5))
-        ttk.Checkbutton(main_frame, text="Hide", variable=self.ending_line2_hidden_var,
-                        command=self.update_ending_preview).grid(row=3, column=5, sticky=tk.W, pady=(15, 5))
+        ttk.Label(left_col, text="Line 2:", font=('Arial', 10, 'bold')).grid(row=3, column=0, sticky=tk.W, pady=(10, 4))
+        ttk.Entry(left_col, textvariable=self.ending_line2_var, width=34).grid(row=3, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(10, 4))
+        ttk.Checkbutton(left_col, text="Hide", variable=self.ending_line2_hidden_var,
+                        command=self.update_ending_preview).grid(row=3, column=3, sticky=tk.W, pady=(10, 4))
         
-        ttk.Label(main_frame, text="Size:").grid(row=4, column=0, sticky=tk.W, padx=(20, 5))
-        ttk.Spinbox(main_frame, from_=0.5, to=3.0, increment=0.1, textvariable=self.ending_line2_size_var, 
-                   width=8, command=self.update_ending_preview).grid(row=4, column=1, sticky=tk.W, padx=(0, 15))
-        
-        ttk.Label(main_frame, text="Color:").grid(row=4, column=2, sticky=tk.W, padx=(0, 5))
-        line2_color_combo = ttk.Combobox(main_frame, textvariable=self.ending_line2_color_var,
+        ttk.Label(left_col, text="Size:").grid(row=4, column=0, sticky=tk.W)
+        ttk.Spinbox(left_col, from_=0.5, to=3.0, increment=0.1, textvariable=self.ending_line2_size_var, 
+                   width=8, command=self.update_ending_preview).grid(row=4, column=1, sticky=tk.W, padx=(0, 8))
+        ttk.Label(left_col, text="Color:").grid(row=4, column=2, sticky=tk.W)
+        line2_color_combo = ttk.Combobox(left_col, textvariable=self.ending_line2_color_var,
                                         values=color_options, width=10)
-        line2_color_combo.grid(row=4, column=3, sticky=tk.W, padx=(0, 15))
+        line2_color_combo.grid(row=4, column=3, sticky=tk.W)
         line2_color_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
-        
-        ttk.Label(main_frame, text="Font:").grid(row=4, column=4, sticky=tk.W, padx=(0, 5))
-        line2_font_combo = ttk.Combobox(main_frame, textvariable=self.ending_line2_font_var,
-                                       values=font_options, width=12)
-        line2_font_combo.grid(row=4, column=5, sticky=tk.W)
+        ttk.Label(left_col, text="Font:").grid(row=5, column=0, sticky=tk.W)
+        line2_font_combo = ttk.Combobox(left_col, textvariable=self.ending_line2_font_var,
+                                       values=font_options, width=14)
+        line2_font_combo.grid(row=5, column=1, columnspan=3, sticky=(tk.W, tk.E))
         line2_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
         
         # Line 3
-        ttk.Label(main_frame, text="Line 3:", font=('Arial', 10, 'bold')).grid(row=5, column=0, sticky=tk.W, pady=(15, 5))
-        ttk.Entry(main_frame, textvariable=self.ending_line3_var, width=40).grid(row=5, column=1, columnspan=4, sticky=tk.W, pady=(15, 5))
-        ttk.Checkbutton(main_frame, text="Hide", variable=self.ending_line3_hidden_var,
-                        command=self.update_ending_preview).grid(row=5, column=5, sticky=tk.W, pady=(15, 5))
+        ttk.Label(left_col, text="Line 3:", font=('Arial', 10, 'bold')).grid(row=6, column=0, sticky=tk.W, pady=(10, 4))
+        ttk.Entry(left_col, textvariable=self.ending_line3_var, width=34).grid(row=6, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(10, 4))
+        ttk.Checkbutton(left_col, text="Hide", variable=self.ending_line3_hidden_var,
+                        command=self.update_ending_preview).grid(row=6, column=3, sticky=tk.W, pady=(10, 4))
         
-        ttk.Label(main_frame, text="Size:").grid(row=6, column=0, sticky=tk.W, padx=(20, 5))
-        ttk.Spinbox(main_frame, from_=0.5, to=3.0, increment=0.1, textvariable=self.ending_line3_size_var, 
-                   width=8, command=self.update_ending_preview).grid(row=6, column=1, sticky=tk.W, padx=(0, 15))
-        
-        ttk.Label(main_frame, text="Color:").grid(row=6, column=2, sticky=tk.W, padx=(0, 5))
-        line3_color_combo = ttk.Combobox(main_frame, textvariable=self.ending_line3_color_var,
+        ttk.Label(left_col, text="Size:").grid(row=7, column=0, sticky=tk.W)
+        ttk.Spinbox(left_col, from_=0.5, to=3.0, increment=0.1, textvariable=self.ending_line3_size_var, 
+                   width=8, command=self.update_ending_preview).grid(row=7, column=1, sticky=tk.W, padx=(0, 8))
+        ttk.Label(left_col, text="Color:").grid(row=7, column=2, sticky=tk.W)
+        line3_color_combo = ttk.Combobox(left_col, textvariable=self.ending_line3_color_var,
                                         values=color_options, width=10)
-        line3_color_combo.grid(row=6, column=3, sticky=tk.W, padx=(0, 15))
+        line3_color_combo.grid(row=7, column=3, sticky=tk.W)
         line3_color_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
-        
-        ttk.Label(main_frame, text="Font:").grid(row=6, column=4, sticky=tk.W, padx=(0, 5))
-        line3_font_combo = ttk.Combobox(main_frame, textvariable=self.ending_line3_font_var,
-                                       values=font_options, width=12)
-        line3_font_combo.grid(row=6, column=5, sticky=tk.W)
+        ttk.Label(left_col, text="Font:").grid(row=8, column=0, sticky=tk.W)
+        line3_font_combo = ttk.Combobox(left_col, textvariable=self.ending_line3_font_var,
+                                       values=font_options, width=14)
+        line3_font_combo.grid(row=8, column=1, columnspan=3, sticky=(tk.W, tk.E))
         line3_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
         
-        # Ending duration
-        ttk.Label(main_frame, text="Duration (sec):", font=('Arial', 10, 'bold')).grid(row=7, column=0, sticky=tk.W, pady=(15, 5))
-        ttk.Spinbox(main_frame, from_=1.0, to=15.0, increment=0.5, textvariable=self.ending_duration_var, 
-                   width=8).grid(row=7, column=1, sticky=tk.W, pady=(15, 5))
-        
-        # Text spacing
-        ttk.Label(main_frame, text="Text Spacing:", font=('Arial', 10, 'bold')).grid(row=7, column=2, sticky=tk.W, pady=(15, 5), padx=(20, 5))
-        ttk.Spinbox(main_frame, from_=0, to=10, increment=1, textvariable=self.ending_text_spacing_var, 
-                   width=8, command=self.update_ending_preview).grid(row=7, column=3, sticky=tk.W, pady=(15, 5))
-        
-        # Logo size
-        ttk.Label(main_frame, text="Logo Size:", font=('Arial', 10, 'bold')).grid(row=7, column=4, sticky=tk.W, pady=(15, 5), padx=(20, 5))
-        ttk.Spinbox(main_frame, from_=100, to=600, increment=25, textvariable=self.ending_logo_size_var, 
-                   width=8, command=self.update_ending_preview).grid(row=7, column=5, sticky=tk.W, pady=(15, 5))
-        
-        # Logo-text spacing
-        ttk.Label(main_frame, text="Logo-Text Spacing:", font=('Arial', 10, 'bold')).grid(row=8, column=0, sticky=tk.W, pady=(15, 5))
-        ttk.Spinbox(main_frame, from_=0, to=200, increment=10, textvariable=self.ending_logo_text_spacing_var, 
-                   width=8, command=self.update_ending_preview).grid(row=8, column=1, sticky=tk.W, pady=(15, 5))
+        # Compact layout for spacing and sizes
+        ttk.Label(left_col, text="Duration (sec):", font=('Arial', 10, 'bold')).grid(row=9, column=0, sticky=tk.W, pady=(10, 4))
+        ttk.Spinbox(left_col, from_=1.0, to=15.0, increment=0.5, textvariable=self.ending_duration_var, 
+                   width=8).grid(row=9, column=1, sticky=tk.W, pady=(10, 4))
+        ttk.Label(left_col, text="Text Spacing:", font=('Arial', 10, 'bold')).grid(row=9, column=2, sticky=tk.W, pady=(10, 4))
+        ttk.Spinbox(left_col, from_=0, to=10, increment=1, textvariable=self.ending_text_spacing_var, 
+                   width=8, command=self.update_ending_preview).grid(row=9, column=3, sticky=tk.W, pady=(10, 4))
+        ttk.Label(left_col, text="Logo Size:", font=('Arial', 10, 'bold')).grid(row=10, column=0, sticky=tk.W, pady=(10, 4))
+        ttk.Spinbox(left_col, from_=100, to=600, increment=25, textvariable=self.ending_logo_size_var, 
+                   width=8, command=self.update_ending_preview).grid(row=10, column=1, sticky=tk.W, pady=(10, 4))
+        ttk.Label(left_col, text="Logo-Text Spacing:", font=('Arial', 10, 'bold')).grid(row=10, column=2, sticky=tk.W, pady=(10, 4))
+        ttk.Spinbox(left_col, from_=0, to=200, increment=10, textvariable=self.ending_logo_text_spacing_var, 
+                   width=8, command=self.update_ending_preview).grid(row=10, column=3, sticky=tk.W, pady=(10, 4))
+
+        # Fade controls (full width, not cramped)
+        fade_frame = ttk.LabelFrame(main_frame, text="Fade Options", padding="8")
+        fade_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(8, 4))
+        ttk.Checkbutton(fade_frame, text="Fade In", variable=self.ending_fade_in_var).grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(fade_frame, text="In Duration (s):").grid(row=0, column=1, sticky=tk.W, padx=(10, 0))
+        ttk.Spinbox(fade_frame, from_=0.0, to=5.0, increment=0.1, textvariable=self.ending_fade_in_dur_var, width=6).grid(row=0, column=2, sticky=tk.W)
+        ttk.Checkbutton(fade_frame, text="Fade Out", variable=self.ending_fade_out_var).grid(row=1, column=0, sticky=tk.W)
+        ttk.Label(fade_frame, text="Out Duration (s):").grid(row=1, column=1, sticky=tk.W, padx=(10, 0))
+        ttk.Spinbox(fade_frame, from_=0.0, to=5.0, increment=0.1, textvariable=self.ending_fade_out_dur_var, width=6).grid(row=1, column=2, sticky=tk.W)
         
         # Preview section
-        preview_frame = ttk.LabelFrame(main_frame, text="Live Preview", padding="10")
-        preview_frame.grid(row=9, column=0, columnspan=6, pady=(15, 10), sticky=(tk.W, tk.E))
+        preview_frame = ttk.LabelFrame(right_col, text="Live Preview", padding="10")
+        preview_frame.grid(row=0, column=0, pady=(10, 8), sticky=(tk.W, tk.E))
+        preview_frame.columnconfigure(0, weight=1)
         
         # Preview canvas (white background to simulate ending screen)
         # Use 16:9 aspect ratio to match video
-        self.ending_preview_canvas = tk.Canvas(preview_frame, width=600, height=338, bg='white')
-        self.ending_preview_canvas.grid(row=0, column=0, pady=(0, 10))
+        self.ending_preview_canvas = tk.Canvas(preview_frame, width=560, height=315, bg='white', highlightthickness=1, highlightbackground="#ccc")
+        self.ending_preview_canvas.grid(row=0, column=0, sticky=(tk.W, tk.E))
+
+        # Make the preview canvas adapt to available width while keeping 16:9
+        def _resize_preview_canvas(event=None):
+            try:
+                max_w = max(360, preview_frame.winfo_width() - 24)
+            except Exception:
+                max_w = 560
+            # Cap to a sensible max within dialog
+            target_w = min(max_w, 580)
+            target_h = int(target_w * 9 / 16)
+            if int(self.ending_preview_canvas['width']) != target_w or int(self.ending_preview_canvas['height']) != target_h:
+                self.ending_preview_canvas.configure(width=target_w, height=target_h)
+                # Re-render with new size
+                self.update_ending_preview()
+
+        preview_frame.bind('<Configure>', lambda e: _resize_preview_canvas(e))
+
+        # helper to choose image
+        def _choose():
+            path = filedialog.askopenfilename(title="Select Ending Image",
+                                              filetypes=[("Image Files", "*.png;*.jpg;*.jpeg;*.webp;*.bmp")])
+            if path:
+                self.ending_image_path_var.set(path)
+        self._choose_ending_image = _choose
         
+        # Extra image controls
+        extra_frame = ttk.LabelFrame(right_col, text="Extra Image (below last line)", padding="10")
+        extra_frame.grid(row=1, column=0, pady=(8, 8), sticky=(tk.W, tk.E))
+        ttk.Checkbutton(extra_frame, text="Enable", variable=self.ending_image_enabled_var,
+                        command=self.update_ending_preview).grid(row=0, column=0, sticky=tk.W, padx=(0,10))
+        ttk.Button(extra_frame, text="Choose Image...",
+                   command=self._choose_ending_image).grid(row=0, column=1, sticky=tk.W, padx=(0,10))
+        ttk.Entry(extra_frame, textvariable=self.ending_image_path_var, width=40, state='readonly').grid(row=0, column=2, columnspan=3, sticky=(tk.W, tk.E))
+        ttk.Label(extra_frame, text="Image Height:").grid(row=1, column=0, sticky=tk.W, pady=(10,0))
+        ttk.Spinbox(extra_frame, from_=50, to=800, increment=10, textvariable=self.ending_image_height_var,
+                    width=8, command=self.update_ending_preview).grid(row=1, column=1, sticky=tk.W, pady=(10,0), padx=(5,15))
+        ttk.Label(extra_frame, text="Spacing (text → image):").grid(row=1, column=2, sticky=tk.W, pady=(10,0))
+        ttk.Spinbox(extra_frame, from_=0, to=300, increment=5, textvariable=self.ending_image_spacing_var,
+                    width=8, command=self.update_ending_preview).grid(row=1, column=3, sticky=tk.W, pady=(10,0), padx=(5,15))
+
         # Buttons frame
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=10, column=0, columnspan=6, pady=(10, 5))
+        button_frame.grid(row=3, column=0, columnspan=2, pady=(6, 4))
         
         # Save as default button
         save_button = ttk.Button(button_frame, text="💾 Save as Default", 
@@ -1590,12 +1744,13 @@ class PostcardVideoCreator:
         
         # Status label
         self.dialog_status_label = ttk.Label(main_frame, text="", foreground="green")
-        self.dialog_status_label.grid(row=11, column=0, columnspan=6, pady=(5, 0))
+        self.dialog_status_label.grid(row=4, column=0, columnspan=2, pady=(0, 0))
         
         # Bind text changes to preview updates
         self.ending_line1_var.trace('w', lambda *args: self.update_ending_preview())
         self.ending_line2_var.trace('w', lambda *args: self.update_ending_preview())
         self.ending_line3_var.trace('w', lambda *args: self.update_ending_preview())
+        self.ending_image_path_var.trace('w', lambda *args: self.update_ending_preview())
         
         # Initial preview
         self.update_ending_preview()
@@ -1604,19 +1759,22 @@ class PostcardVideoCreator:
         """Open start text configuration dialog"""
         dialog = tk.Toplevel(self.root)
         dialog.title("Configure Start Text")
-        dialog.geometry("900x750")
-        dialog.resizable(False, False)
+        dialog.geometry("1000x720")
+        dialog.resizable(True, True)
         dialog.transient(self.root)
         dialog.grab_set()
         
-        # Center the dialog
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (900 // 2)
-        y = (dialog.winfo_screenheight() // 2) - (750 // 2)
-        dialog.geometry(f"900x750+{x}+{y}")
+        # Maximize window when supported; otherwise center
+        try:
+            dialog.state('zoomed')  # Windows
+        except Exception:
+            dialog.update_idletasks()
+            x = (dialog.winfo_screenwidth() // 2) - (1000 // 2)
+            y = (dialog.winfo_screenheight() // 2) - (720 // 2)
+            dialog.geometry(f"1000x720+{x}+{y}")
         
         # Main frame
-        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame = ttk.Frame(dialog, padding="16")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Title
@@ -1674,25 +1832,35 @@ class PostcardVideoCreator:
         ttk.Label(main_frame, text="Duration (sec):", font=('Arial', 10, 'bold')).grid(row=5, column=0, sticky=tk.W, pady=(15, 5))
         ttk.Spinbox(main_frame, from_=1.0, to=15.0, increment=0.5, textvariable=self.start_duration_var, 
                    width=8).grid(row=5, column=1, sticky=tk.W, pady=(15, 5))
+
+        # Fade controls for start (full row to avoid cramped layout)
+        fade_frame = ttk.LabelFrame(main_frame, text="Fade Options", padding="8")
+        fade_frame.grid(row=6, column=0, columnspan=6, sticky=(tk.W, tk.E), padx=(0,0), pady=(10,0))
+        ttk.Checkbutton(fade_frame, text="Fade In", variable=self.start_fade_in_var).grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(fade_frame, text="In Duration (s):").grid(row=0, column=1, sticky=tk.W, padx=(10, 0))
+        ttk.Spinbox(fade_frame, from_=0.0, to=5.0, increment=0.1, textvariable=self.start_fade_in_dur_var, width=6).grid(row=0, column=2, sticky=tk.W)
+        ttk.Checkbutton(fade_frame, text="Fade Out", variable=self.start_fade_out_var).grid(row=1, column=0, sticky=tk.W)
+        ttk.Label(fade_frame, text="Out Duration (s):").grid(row=1, column=1, sticky=tk.W, padx=(10, 0))
+        ttk.Spinbox(fade_frame, from_=0.0, to=5.0, increment=0.1, textvariable=self.start_fade_out_dur_var, width=6).grid(row=1, column=2, sticky=tk.W)
         
         # Text spacing
-        ttk.Label(main_frame, text="Text Spacing:", font=('Arial', 10, 'bold')).grid(row=5, column=2, sticky=tk.W, pady=(15, 5), padx=(20, 5))
+        ttk.Label(main_frame, text="Text Spacing:", font=('Arial', 10, 'bold')).grid(row=7, column=2, sticky=tk.W, pady=(10, 5), padx=(20, 5))
         ttk.Spinbox(main_frame, from_=0, to=10, increment=1, textvariable=self.start_text_spacing_var, 
-                   width=8, command=self.update_start_preview).grid(row=5, column=3, sticky=tk.W, pady=(15, 5))
+                   width=8, command=self.update_start_preview).grid(row=7, column=3, sticky=tk.W, pady=(10, 5))
         
         # Logo size
-        ttk.Label(main_frame, text="Logo Size:", font=('Arial', 10, 'bold')).grid(row=5, column=4, sticky=tk.W, pady=(15, 5), padx=(20, 5))
+        ttk.Label(main_frame, text="Logo Size:", font=('Arial', 10, 'bold')).grid(row=7, column=4, sticky=tk.W, pady=(10, 5), padx=(20, 5))
         ttk.Spinbox(main_frame, from_=100, to=600, increment=25, textvariable=self.start_logo_size_var, 
-                   width=8, command=self.update_start_preview).grid(row=5, column=5, sticky=tk.W, pady=(15, 5))
+                   width=8, command=self.update_start_preview).grid(row=7, column=5, sticky=tk.W, pady=(10, 5))
         
         # Logo-text spacing
-        ttk.Label(main_frame, text="Logo-Text Spacing:", font=('Arial', 10, 'bold')).grid(row=6, column=0, sticky=tk.W, pady=(15, 5))
+        ttk.Label(main_frame, text="Logo-Text Spacing:", font=('Arial', 10, 'bold')).grid(row=8, column=0, sticky=tk.W, pady=(10, 5))
         ttk.Spinbox(main_frame, from_=0, to=200, increment=10, textvariable=self.start_logo_text_spacing_var, 
-                   width=8, command=self.update_start_preview).grid(row=6, column=1, sticky=tk.W, pady=(15, 5))
+                   width=8, command=self.update_start_preview).grid(row=8, column=1, sticky=tk.W, pady=(10, 5))
         
         # Preview section
         preview_frame = ttk.LabelFrame(main_frame, text="Live Preview", padding="10")
-        preview_frame.grid(row=7, column=0, columnspan=6, pady=(15, 10), sticky=(tk.W, tk.E))
+        preview_frame.grid(row=9, column=0, columnspan=6, pady=(10, 10), sticky=(tk.W, tk.E))
         
         # Preview canvas (white background to simulate start screen)
         self.start_preview_canvas = tk.Canvas(preview_frame, width=600, height=338, bg='white')
@@ -1700,7 +1868,7 @@ class PostcardVideoCreator:
         
         # Buttons frame
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=8, column=0, columnspan=6, pady=(10, 5))
+        button_frame.grid(row=10, column=0, columnspan=6, pady=(10, 5))
         
         # Save as default button
         save_button = ttk.Button(button_frame, text="💾 Save as Default", 
@@ -1713,7 +1881,7 @@ class PostcardVideoCreator:
         
         # Status label
         self.start_dialog_status_label = ttk.Label(main_frame, text="", foreground="green")
-        self.start_dialog_status_label.grid(row=9, column=0, columnspan=6, pady=(5, 0))
+        self.start_dialog_status_label.grid(row=11, column=0, columnspan=6, pady=(5, 0))
         
         # Bind text changes to preview updates
         self.start_line1_var.trace('w', lambda *args: self.update_start_preview())
@@ -1756,9 +1924,16 @@ class PostcardVideoCreator:
                 "orange": "#FFA500"
             }
             
-            # Canvas dimensions (preview size)
-            canvas_width = 600
-            canvas_height = 338
+            # Canvas dimensions (use actual widget size)
+            try:
+                canvas_width = int(self.ending_preview_canvas['width'])
+                canvas_height = int(self.ending_preview_canvas['height'])
+            except Exception:
+                canvas_width = 520
+                canvas_height = 292
+            if canvas_width <= 0 or canvas_height <= 0:
+                canvas_width = 520
+                canvas_height = 292
             
             # Video dimensions (actual output)
             video_width = 1920
@@ -1895,9 +2070,16 @@ class PostcardVideoCreator:
                 "orange": "#FFA500"
             }
             
-            # Canvas dimensions (preview size)
-            canvas_width = 600
-            canvas_height = 338
+            # Canvas dimensions (use actual widget size)
+            try:
+                canvas_width = int(self.start_preview_canvas['width'])
+                canvas_height = int(self.start_preview_canvas['height'])
+            except Exception:
+                canvas_width = 600
+                canvas_height = 338
+            if canvas_width <= 0 or canvas_height <= 0:
+                canvas_width = 600
+                canvas_height = 338
             
             # Video dimensions (actual output)
             video_width = 1920
@@ -1964,6 +2146,15 @@ class PostcardVideoCreator:
                 total_text_height += adjusted_spacing
             if (line2 and not line2_hidden) and (line3 and not line3_hidden):
                 total_text_height += adjusted_spacing
+
+            # Extra image contribution
+            extra_image_enabled = self.ending_image_enabled_var.get()
+            extra_image_spacing = self.ending_image_spacing_var.get()
+            extra_image_height_video = self.ending_image_height_var.get()
+            extra_image_height_preview = int(extra_image_height_video * height_scale)
+            extra_image_spacing_preview = int(extra_image_spacing * height_scale)
+            if extra_image_enabled and self.ending_image_path_var.get() and os.path.exists(self.ending_image_path_var.get()):
+                total_text_height += extra_image_spacing_preview + extra_image_height_preview
             
             # Total content height = logo + spacing + text
             total_content_height = logo_height + logo_text_spacing_preview + total_text_height
@@ -2013,6 +2204,36 @@ class PostcardVideoCreator:
                 y3 = int(text_start_y + (adjusted_spacing * max(visible_offset, 0)))
                 self.ending_preview_canvas.create_text(canvas_width//2, y3, text=line3, 
                                               fill=color3, font=(line3_font, font3_size, 'bold'))
+
+            # Extra image rendering (preview)
+            if extra_image_enabled and self.ending_image_path_var.get() and os.path.exists(self.ending_image_path_var.get()):
+                try:
+                    extra_img = Image.open(self.ending_image_path_var.get())
+                    # Maintain aspect ratio by scaling height, width proportional
+                    w, h = extra_img.size
+                    if h <= 0:
+                        h = 1
+                    new_h = max(1, extra_image_height_preview)
+                    new_w = int(w * (new_h / h))
+                    extra_img = extra_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                    self.ending_extra_image_photo = ImageTk.PhotoImage(extra_img)
+
+                    # Compute y position below the last visible text line
+                    last_y = text_start_y
+                    visible_offset = 0
+                    if line1 and not line1_hidden:
+                        visible_offset += 1
+                    if line2 and not line2_hidden:
+                        last_y = int(text_start_y + adjusted_spacing)
+                        visible_offset += 1
+                    if line3 and not line3_hidden:
+                        last_y = int(text_start_y + (adjusted_spacing * max(visible_offset, 0)))
+
+                    extra_y = int(last_y + extra_image_spacing_preview)
+                    extra_x = (canvas_width - new_w) // 2
+                    self.ending_preview_canvas.create_image(extra_x, extra_y, anchor=tk.NW, image=self.ending_extra_image_photo)
+                except Exception as e:
+                    print(f"Ending preview extra image error: {e}")
                 
         except Exception as e:
             print(f"Ending preview update error: {e}")
@@ -2191,6 +2412,20 @@ class PostcardVideoCreator:
                 "ending_line1_hidden": self.ending_line1_hidden_var.get(),
                 "ending_line2_hidden": self.ending_line2_hidden_var.get(),
                 "ending_line3_hidden": self.ending_line3_hidden_var.get(),
+                # Ending extra image
+                "ending_image_enabled": self.ending_image_enabled_var.get(),
+                "ending_image_path": self.ending_image_path_var.get(),
+                "ending_image_height": self.ending_image_height_var.get(),
+                "ending_image_spacing": self.ending_image_spacing_var.get(),
+                # Fade options
+                "start_fade_in": self.start_fade_in_var.get(),
+                "start_fade_out": self.start_fade_out_var.get(),
+                "start_fade_in_dur": self.start_fade_in_dur_var.get(),
+                "start_fade_out_dur": self.start_fade_out_dur_var.get(),
+                "ending_fade_in": self.ending_fade_in_var.get(),
+                "ending_fade_out": self.ending_fade_out_var.get(),
+                "ending_fade_in_dur": self.ending_fade_in_dur_var.get(),
+                "ending_fade_out_dur": self.ending_fade_out_dur_var.get(),
                 # General settings
                 "default_duration": self.default_duration_var.get(),
                 "transition_duration": self.transition_duration_var.get(),
@@ -2237,6 +2472,10 @@ class PostcardVideoCreator:
                 self.start_logo_size_var.set(defaults.get("start_logo_size", 300))
                 self.start_logo_text_spacing_var.set(defaults.get("start_logo_text_spacing", 20))
                 self.start_line1_hidden_var.set(defaults.get("start_line1_hidden", False))
+                self.start_fade_in_var.set(defaults.get("start_fade_in", False))
+                self.start_fade_out_var.set(defaults.get("start_fade_out", False))
+                self.start_fade_in_dur_var.set(defaults.get("start_fade_in_dur", 0.5))
+                self.start_fade_out_dur_var.set(defaults.get("start_fade_out_dur", 0.5))
                 
                 # Load ending text and styling
                 self.ending_line1_var.set(defaults.get("ending_line1", "Lincoln Rare Books & Collectables"))
@@ -2258,6 +2497,14 @@ class PostcardVideoCreator:
                 self.ending_line1_hidden_var.set(defaults.get("ending_line1_hidden", False))
                 self.ending_line2_hidden_var.set(defaults.get("ending_line2_hidden", False))
                 self.ending_line3_hidden_var.set(defaults.get("ending_line3_hidden", False))
+                self.ending_image_enabled_var.set(defaults.get("ending_image_enabled", False))
+                self.ending_image_path_var.set(defaults.get("ending_image_path", ""))
+                self.ending_image_height_var.set(defaults.get("ending_image_height", 200))
+                self.ending_image_spacing_var.set(defaults.get("ending_image_spacing", 20))
+                self.ending_fade_in_var.set(defaults.get("ending_fade_in", False))
+                self.ending_fade_out_var.set(defaults.get("ending_fade_out", False))
+                self.ending_fade_in_dur_var.set(defaults.get("ending_fade_in_dur", 0.5))
+                self.ending_fade_out_dur_var.set(defaults.get("ending_fade_out_dur", 0.5))
                 
                 # Load other settings
                 self.default_duration_var.set(defaults.get("default_duration", 4))
