@@ -132,6 +132,9 @@ class PostcardVideoCreator:
         self.transition_duration = 1.0  # seconds
         self.video_width = 1920
         self.video_height = 1080
+        
+        # Background color for square format
+        self.background_color_var = tk.StringVar(value="white")
 
         # Global fade options
         self.start_fade_in_var = tk.BooleanVar(value=False)
@@ -235,7 +238,7 @@ class PostcardVideoCreator:
         ttk.Label(settings_frame, text="Video Resolution:").grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
         self.resolution_var = tk.StringVar(value="1920x1080")
         resolution_combo = ttk.Combobox(settings_frame, textvariable=self.resolution_var, 
-                                       values=["1920x1080", "1280x720", "3840x2160"], width=15)
+                                       values=["1920x1080", "1280x720", "3840x2160", "1080x1080 (Square)", "720x720 (Square)"], width=18)
         resolution_combo.grid(row=1, column=1, sticky=tk.W, pady=(10, 0), padx=(0, 20))
         resolution_combo.bind('<<ComboboxSelected>>', self.update_resolution)
         
@@ -267,13 +270,21 @@ class PostcardVideoCreator:
         preview_button = ttk.Button(settings_frame, text="🎵 Preview", command=self.preview_music)
         preview_button.grid(row=2, column=4, sticky=tk.W, pady=(10, 0), padx=(10, 0))
         
+        # Background color for square format
+        ttk.Label(settings_frame, text="Square Background:").grid(row=3, column=0, sticky=tk.W, pady=(10, 0))
+        background_color_combo = ttk.Combobox(settings_frame, textvariable=self.background_color_var,
+                                            values=["white", "black", "gray", "light_gray", "dark_gray", 
+                                                   "red", "green", "blue", "yellow", "cyan", "magenta", 
+                                                   "orange", "purple", "brown", "pink", "navy"], width=15)
+        background_color_combo.grid(row=3, column=1, sticky=tk.W, pady=(10, 0), padx=(0, 20))
+        
         # Ending text configuration button
         ending_config_button = ttk.Button(settings_frame, text="🎬 Configure Ending Text", command=self.open_ending_config)
-        ending_config_button.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
+        ending_config_button.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
         
         # Start text configuration button
         start_config_button = ttk.Button(settings_frame, text="🎬 Configure Start Text", command=self.open_start_config)
-        start_config_button.grid(row=3, column=2, columnspan=2, sticky=tk.W, pady=(10, 0))
+        start_config_button.grid(row=4, column=2, columnspan=2, sticky=tk.W, pady=(10, 0))
         
         # File selection frame
         file_frame = ttk.LabelFrame(main_frame, text="Postcard Images", padding="10")
@@ -393,6 +404,14 @@ class PostcardVideoCreator:
             self.video_width, self.video_height = 1280, 720
         elif resolution == "3840x2160":
             self.video_width, self.video_height = 3840, 2160
+        elif resolution == "1080x1080 (Square)":
+            self.video_width, self.video_height = 1080, 1080
+        elif resolution == "720x720 (Square)":
+            self.video_width, self.video_height = 720, 720
+    
+    def is_square_format(self):
+        """Check if current resolution is square format"""
+        return self.video_width == self.video_height
     
     def select_multiple_images(self):
         # Open file dialog for multiple images
@@ -1291,6 +1310,14 @@ class PostcardVideoCreator:
         # Convert BGR to RGB
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         
+        # Create background based on format
+        if self.is_square_format():
+            # Square format: use selected color background
+            background = self.create_colored_background()
+        else:
+            # Regular format: use black background
+            background = np.zeros((self.video_height, self.video_width, 3), dtype=np.uint8)
+        
         # Resize to fit video dimensions while preserving aspect ratio and showing full image
         h, w = img_rgb.shape[:2]
         
@@ -1306,9 +1333,6 @@ class PostcardVideoCreator:
         # Resize image
         img_resized = cv2.resize(img_rgb, (new_w, new_h))
         
-        # Create black background
-        background = np.zeros((self.video_height, self.video_width, 3), dtype=np.uint8)
-        
         # Calculate position to center the image
         x_offset = (self.video_width - new_w) // 2
         y_offset = (self.video_height - new_h) // 2
@@ -1320,9 +1344,39 @@ class PostcardVideoCreator:
         # Create clip
         clip = ImageClip(img_resized, duration=duration)
         
-        # No zoom effect for now - just return the clip as is
-        
         return clip
+    
+    def get_background_color_rgb(self):
+        """Get RGB values for the selected background color"""
+        color_name = self.background_color_var.get()
+        
+        # Color mapping (RGB format)
+        color_map = {
+            "white": (255, 255, 255),
+            "black": (0, 0, 0),
+            "gray": (128, 128, 128),
+            "light_gray": (211, 211, 211),
+            "dark_gray": (64, 64, 64),
+            "red": (255, 0, 0),
+            "green": (0, 128, 0),
+            "blue": (0, 0, 255),
+            "yellow": (255, 255, 0),
+            "cyan": (0, 255, 255),
+            "magenta": (255, 0, 255),
+            "orange": (255, 165, 0),
+            "purple": (128, 0, 128),
+            "brown": (139, 69, 19),
+            "pink": (255, 192, 203),
+            "navy": (0, 0, 128)
+        }
+        
+        return color_map.get(color_name, (255, 255, 255))  # Default to white
+    
+    def create_colored_background(self):
+        """Create a solid colored background for square format"""
+        color_rgb = self.get_background_color_rgb()
+        background = np.full((self.video_height, self.video_width, 3), color_rgb, dtype=np.uint8)
+        return background
         
     def create_transition(self, clip1, clip2):
         """Create a transition effect between two clips"""
@@ -1563,7 +1617,7 @@ class PostcardVideoCreator:
             import cv2
             from PIL import Image
             
-            # Create white frame (like start screen)
+            # Create white background for start/end screens regardless of format
             frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 255
             
             # Get text lines and styling (3 lines for ending)
@@ -1869,7 +1923,7 @@ class PostcardVideoCreator:
             import os
             from PIL import Image
             
-            # Create white frame
+            # Create white background for start/end screens regardless of format
             frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 255
             
             # Get text lines and styling
@@ -2286,7 +2340,8 @@ class PostcardVideoCreator:
                 "transition_duration": self.transition_duration_var.get(),
                 "effect": self.effect_var.get(),
                 "music": self.music_var.get(),
-                "music_volume": self.music_volume_var.get()
+                "music_volume": self.music_volume_var.get(),
+                "background_color": self.background_color_var.get()
             }
             
             with open('defaults.json', 'w') as f:
@@ -3114,6 +3169,7 @@ class PostcardVideoCreator:
                 "effect": self.effect_var.get(),
                 "music": self.music_var.get(),
                 "music_volume": self.music_volume_var.get(),
+                "background_color": self.background_color_var.get(),
                 "ending_line1": self.ending_line1_var.get(),
                 "ending_line2": self.ending_line2_var.get(),
                 "ending_line3": self.ending_line3_var.get(),
@@ -3283,7 +3339,8 @@ class PostcardVideoCreator:
                 "transition_duration": self.transition_duration_var.get(),
                 "effect": self.effect_var.get(),
                 "music": self.music_var.get(),
-                "music_volume": self.music_volume_var.get()
+                "music_volume": self.music_volume_var.get(),
+                "background_color": self.background_color_var.get()
             }
             
             with open('defaults.json', 'w') as f:
@@ -3368,6 +3425,7 @@ class PostcardVideoCreator:
                 self.effect_var.set(defaults.get("effect", "fade"))
                 self.music_var.set(defaults.get("music", "Vintage Memories"))
                 self.music_volume_var.set(defaults.get("music_volume", 0.3))
+                self.background_color_var.set(defaults.get("background_color", "white"))
                 
         except Exception as e:
             print(f"Failed to load defaults: {e}")
