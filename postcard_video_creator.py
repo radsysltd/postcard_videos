@@ -1375,7 +1375,7 @@ class PostcardVideoCreator:
             
             # Always use part numbers in filename, include dimensions
             dimensions = f"{self.video_width}x{self.video_height}"
-            output_filename = f"{safe_filename}_Part{part_number}_{timestamp}_{dimensions}.mp4"
+            output_filename = f"{timestamp}_{safe_filename}_Part{part_number}_{dimensions}.mp4"
             output_path = os.path.join(self.output_path, output_filename)
             
             logging.info(f"DEBUG: Generated filename: {output_filename} from Line1: '{line1_text}' (Part {part_number})")
@@ -1673,7 +1673,7 @@ class PostcardVideoCreator:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             dimensions = f"{self.video_width}x{self.video_height}"
             part_number = self.starting_part_var.get()
-            output_filename = f"{safe_filename}_Part{part_number}_{timestamp}_{dimensions}.mp4"
+            output_filename = f"{timestamp}_{safe_filename}_Part{part_number}_{dimensions}.mp4"
             output_path = os.path.join(self.output_path, output_filename)
             
             logging.info(f"DEBUG: Generated filename: {output_filename} from Line1: '{line1_text}'")
