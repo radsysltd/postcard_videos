@@ -1697,6 +1697,13 @@ class PostcardVideoCreator:
         time_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
         self.status_label.config(text=f"✅ Video created in {time_str}! Saved to: {os.path.basename(output_path)} - Click 'PLAY VIDEO' to view it!")
         
+        # Auto-save current settings as defaults after successful video creation
+        try:
+            self.save_defaults()
+            logging.debug("Auto-saved settings as defaults after successful video creation")
+        except Exception as e:
+            logging.warning(f"Failed to auto-save defaults after video creation: {e}")
+        
     def show_error_message(self, error_msg):
         messagebox.showerror("Error", f"Failed to create video:\n{error_msg}")
         
@@ -1795,6 +1802,7 @@ class PostcardVideoCreator:
             import json
             
             defaults = {
+                # Start screen settings
                 "start_line1": self.start_line1_var.get(),
                 "start_line2": self.start_line2_var.get(),
                 "start_line1_size": self.start_line1_size_var.get(),
@@ -1804,6 +1812,16 @@ class PostcardVideoCreator:
                 "start_line1_font": self.start_line1_font_var.get(),
                 "start_line2_font": self.start_line2_font_var.get(),
                 "start_duration": self.start_duration_var.get(),
+                "start_text_spacing": self.start_text_spacing_var.get(),
+                "start_logo_size": self.start_logo_size_var.get(),
+                "start_logo_text_spacing": self.start_logo_text_spacing_var.get(),
+                "start_line1_hidden": self.start_line1_hidden_var.get(),
+                # Start extra image
+                "start_image_enabled": self.start_image_enabled_var.get(),
+                "start_image_path": self.start_image_path_var.get(),
+                "start_image_height": self.start_image_height_var.get(),
+                "start_image_spacing": self.start_image_spacing_var.get(),
+                # Ending screen settings
                 "ending_line1": self.ending_line1_var.get(),
                 "ending_line2": self.ending_line2_var.get(),
                 "ending_line3": self.ending_line3_var.get(),
@@ -1817,19 +1835,32 @@ class PostcardVideoCreator:
                 "ending_line2_font": self.ending_line2_font_var.get(),
                 "ending_line3_font": self.ending_line3_font_var.get(),
                 "ending_duration": self.ending_duration_var.get(),
+                "ending_text_spacing": self.ending_text_spacing_var.get(),
+                "ending_logo_size": self.ending_logo_size_var.get(),
+                "ending_logo_text_spacing": self.ending_logo_text_spacing_var.get(),
                 "ending_line1_hidden": self.ending_line1_hidden_var.get(),
                 "ending_line2_hidden": self.ending_line2_hidden_var.get(),
                 "ending_line3_hidden": self.ending_line3_hidden_var.get(),
-                "default_duration": self.default_duration_var.get(),
-                "transition_duration": self.transition_duration_var.get(),
-                "effect": self.effect_var.get(),
-                "music": self.music_var.get(),
-                "music_volume": self.music_volume_var.get(),
                 # Ending extra image
                 "ending_image_enabled": self.ending_image_enabled_var.get(),
                 "ending_image_path": self.ending_image_path_var.get(),
                 "ending_image_height": self.ending_image_height_var.get(),
-                "ending_image_spacing": self.ending_image_spacing_var.get()
+                "ending_image_spacing": self.ending_image_spacing_var.get(),
+                # Fade options
+                "start_fade_in": self.start_fade_in_var.get(),
+                "start_fade_out": self.start_fade_out_var.get(),
+                "start_fade_in_dur": self.start_fade_in_dur_var.get(),
+                "start_fade_out_dur": self.start_fade_out_dur_var.get(),
+                "ending_fade_in": self.ending_fade_in_var.get(),
+                "ending_fade_out": self.ending_fade_out_var.get(),
+                "ending_fade_in_dur": self.ending_fade_in_dur_var.get(),
+                "ending_fade_out_dur": self.ending_fade_out_dur_var.get(),
+                # General settings
+                "default_duration": self.default_duration_var.get(),
+                "transition_duration": self.transition_duration_var.get(),
+                "effect": self.effect_var.get(),
+                "music": self.music_var.get(),
+                "music_volume": self.music_volume_var.get()
             }
             
             with open('defaults.json', 'w') as f:
