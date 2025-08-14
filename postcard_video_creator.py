@@ -1228,7 +1228,7 @@ class PostcardVideoCreator:
                         self.root.after(0, lambda: self.status_label.config(text="Creating video..."))
                     
                     # Create video for this batch
-                    video_path = self.process_single_batch_video(batch_indices, actual_part_number, total_videos)
+                    video_path = self.process_single_batch_video(batch_indices, actual_part_number, total_videos, original_line1)
                     if video_path:
                         videos_created.append(video_path)
                     
@@ -1267,7 +1267,7 @@ class PostcardVideoCreator:
         finally:
             self.root.after(0, self.finish_processing)
     
-    def process_single_batch_video(self, batch_indices, part_number, total_parts):
+    def process_single_batch_video(self, batch_indices, part_number, total_parts, original_title=None):
         """Process a single video from a batch of image indices"""
         try:
             logging.info(f"DEBUG: Starting batch video {part_number}/{total_parts} with {len(batch_indices)} images")
@@ -1361,8 +1361,8 @@ class PostcardVideoCreator:
             final_video = concatenate_videoclips(clips, method="compose")
             logging.info(f"DEBUG: Clips concatenated successfully for batch video")
             
-            # Generate output filename using Line 1 text from start screen
-            line1_text = self.start_line1_var.get()
+            # Generate output filename using original title (before part number was added)
+            line1_text = original_title if original_title else self.start_line1_var.get()
             # Sanitize filename by removing invalid characters
             safe_filename = "".join(c for c in line1_text if c.isalnum() or c in (' ', '-', '_')).strip()
             safe_filename = safe_filename.replace(' ', '_')
