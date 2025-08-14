@@ -77,6 +77,10 @@ class PostcardVideoCreator:
         self.ending_text_spacing_var = tk.IntVar(value=1)
         self.ending_logo_size_var = tk.IntVar(value=300)
         self.ending_logo_text_spacing_var = tk.IntVar(value=20)
+        # Ending line visibility toggles
+        self.ending_line1_hidden_var = tk.BooleanVar(value=False)
+        self.ending_line2_hidden_var = tk.BooleanVar(value=False)
+        self.ending_line3_hidden_var = tk.BooleanVar(value=False)
         
         self.setup_ui()
         
@@ -1002,6 +1006,9 @@ class PostcardVideoCreator:
             # DYNAMIC VERTICAL CENTERING - Calculate total content height and center it
             logo_text_spacing = getattr(self, 'ending_logo_text_spacing_var', self.start_logo_text_spacing_var).get()
             logo_size_video = getattr(self, 'ending_logo_size_var', self.start_logo_size_var).get()
+            line1_hidden = getattr(self, 'ending_line1_hidden_var', tk.BooleanVar(value=False)).get()
+            line2_hidden = getattr(self, 'ending_line2_hidden_var', tk.BooleanVar(value=False)).get()
+            line3_hidden = getattr(self, 'ending_line3_hidden_var', tk.BooleanVar(value=False)).get()
             
             # Calculate total content height
             logo_height = logo_size_video
@@ -1012,17 +1019,17 @@ class PostcardVideoCreator:
             # Calculate text heights (approximate)
             text_height_estimate = 50  # Approximate height for text lines
             total_text_height = 0
-            if line1:
+            if line1 and not line1_hidden:
                 total_text_height += text_height_estimate
-            if line2:
+            if line2 and not line2_hidden:
                 total_text_height += text_height_estimate
-            if line3:
+            if line3 and not line3_hidden:
                 total_text_height += text_height_estimate
             
             # Add spacing between text lines
-            if line1 and line2:
+            if (line1 and not line1_hidden) and (line2 and not line2_hidden):
                 total_text_height += adjusted_spacing
-            if line2 and line3:
+            if (line2 and not line2_hidden) and (line3 and not line3_hidden):
                 total_text_height += adjusted_spacing
             
             # Total content height = logo + spacing + text
@@ -1090,7 +1097,7 @@ class PostcardVideoCreator:
                     print(f"Error loading logo: {e}")
             
             # Line 1
-            if line1:
+            if line1 and not line1_hidden:
                 print(f"DEBUG: Drawing Line 1 - Text: '{line1}'")
                 color1 = color_map.get(line1_color, (0, 0, 0))
                 # No fade effect - use full color immediately
@@ -1105,7 +1112,7 @@ class PostcardVideoCreator:
                 print(f"DEBUG: Line 1 is empty or None")
             
             # Line 2
-            if line2:
+            if line2 and not line2_hidden:
                 print(f"DEBUG: Drawing Line 2 - Text: '{line2}'")
                 color2 = color_map.get(line2_color, (0, 0, 0))
                 # No fade effect - use full color immediately
@@ -1113,14 +1120,18 @@ class PostcardVideoCreator:
 
                 (text_width, text_height), _ = cv2.getTextSize(line2, font2, line2_size, thickness)
                 x2 = (self.video_width - text_width) // 2
-                y2 = int(text_start_y + adjusted_spacing)  # Convert to integer for OpenCV
+                # If line1 is hidden, keep line2 at text_start_y; otherwise below line1
+                if line1 and not line1_hidden:
+                    y2 = int(text_start_y + adjusted_spacing)
+                else:
+                    y2 = int(text_start_y)
                 cv2.putText(frame, line2, (x2, y2), font2, line2_size, text_color2, thickness)
                 print(f"DEBUG: Ending Line 2 - Text: '{line2}', Color: {text_color2}, Pos: ({x2}, {y2})")
             else:
                 print(f"DEBUG: Line 2 is empty or None")
             
             # Line 3
-            if line3:
+            if line3 and not line3_hidden:
                 print(f"DEBUG: Drawing Line 3 - Text: '{line3}'")
                 color3 = color_map.get(line3_color, (0, 0, 0))
                 # No fade effect - use full color immediately
@@ -1128,7 +1139,13 @@ class PostcardVideoCreator:
 
                 (text_width, text_height), _ = cv2.getTextSize(line3, font3, line3_size, thickness)
                 x3 = (self.video_width - text_width) // 2
-                y3 = int(text_start_y + (adjusted_spacing * 2))  # Convert to integer for OpenCV
+                # Determine y3 based on which previous lines are visible
+                visible_offset = 0
+                if line1 and not line1_hidden:
+                    visible_offset += 1
+                if line2 and not line2_hidden:
+                    visible_offset += 1
+                y3 = int(text_start_y + (adjusted_spacing * max(visible_offset, 0)))
                 cv2.putText(frame, line3, (x3, y3), font3, line3_size, text_color3, thickness)
                 print(f"DEBUG: Ending Line 3 - Text: '{line3}', Color: {text_color3}, Pos: ({x3}, {y3})")
             else:
@@ -1411,6 +1428,9 @@ class PostcardVideoCreator:
                 "ending_line2_font": self.ending_line2_font_var.get(),
                 "ending_line3_font": self.ending_line3_font_var.get(),
                 "ending_duration": self.ending_duration_var.get(),
+                "ending_line1_hidden": self.ending_line1_hidden_var.get(),
+                "ending_line2_hidden": self.ending_line2_hidden_var.get(),
+                "ending_line3_hidden": self.ending_line3_hidden_var.get(),
                 "default_duration": self.default_duration_var.get(),
                 "transition_duration": self.transition_duration_var.get(),
                 "effect": self.effect_var.get(),
@@ -1462,7 +1482,9 @@ class PostcardVideoCreator:
         
         # Line 1
         ttk.Label(main_frame, text="Line 1:", font=('Arial', 10, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
-        ttk.Entry(main_frame, textvariable=self.ending_line1_var, width=40).grid(row=1, column=1, columnspan=5, sticky=tk.W, pady=(0, 5))
+        ttk.Entry(main_frame, textvariable=self.ending_line1_var, width=40).grid(row=1, column=1, columnspan=4, sticky=tk.W, pady=(0, 5))
+        ttk.Checkbutton(main_frame, text="Hide", variable=self.ending_line1_hidden_var,
+                        command=self.update_ending_preview).grid(row=1, column=5, sticky=tk.W, pady=(0, 5))
         
         ttk.Label(main_frame, text="Size:").grid(row=2, column=0, sticky=tk.W, padx=(20, 5))
         ttk.Spinbox(main_frame, from_=0.5, to=3.0, increment=0.1, textvariable=self.ending_line1_size_var, 
@@ -1482,7 +1504,9 @@ class PostcardVideoCreator:
         
         # Line 2
         ttk.Label(main_frame, text="Line 2:", font=('Arial', 10, 'bold')).grid(row=3, column=0, sticky=tk.W, pady=(15, 5))
-        ttk.Entry(main_frame, textvariable=self.ending_line2_var, width=40).grid(row=3, column=1, columnspan=5, sticky=tk.W, pady=(15, 5))
+        ttk.Entry(main_frame, textvariable=self.ending_line2_var, width=40).grid(row=3, column=1, columnspan=4, sticky=tk.W, pady=(15, 5))
+        ttk.Checkbutton(main_frame, text="Hide", variable=self.ending_line2_hidden_var,
+                        command=self.update_ending_preview).grid(row=3, column=5, sticky=tk.W, pady=(15, 5))
         
         ttk.Label(main_frame, text="Size:").grid(row=4, column=0, sticky=tk.W, padx=(20, 5))
         ttk.Spinbox(main_frame, from_=0.5, to=3.0, increment=0.1, textvariable=self.ending_line2_size_var, 
@@ -1502,7 +1526,9 @@ class PostcardVideoCreator:
         
         # Line 3
         ttk.Label(main_frame, text="Line 3:", font=('Arial', 10, 'bold')).grid(row=5, column=0, sticky=tk.W, pady=(15, 5))
-        ttk.Entry(main_frame, textvariable=self.ending_line3_var, width=40).grid(row=5, column=1, columnspan=5, sticky=tk.W, pady=(15, 5))
+        ttk.Entry(main_frame, textvariable=self.ending_line3_var, width=40).grid(row=5, column=1, columnspan=4, sticky=tk.W, pady=(15, 5))
+        ttk.Checkbutton(main_frame, text="Hide", variable=self.ending_line3_hidden_var,
+                        command=self.update_ending_preview).grid(row=5, column=5, sticky=tk.W, pady=(15, 5))
         
         ttk.Label(main_frame, text="Size:").grid(row=6, column=0, sticky=tk.W, padx=(20, 5))
         ttk.Spinbox(main_frame, from_=0.5, to=3.0, increment=0.1, textvariable=self.ending_line3_size_var, 
@@ -1923,17 +1949,20 @@ class PostcardVideoCreator:
             # Calculate text heights (approximate)
             text_height_estimate = int(50 * height_scale)  # Scale for preview
             total_text_height = 0
-            if line1:
+            line1_hidden = self.ending_line1_hidden_var.get()
+            line2_hidden = self.ending_line2_hidden_var.get()
+            line3_hidden = self.ending_line3_hidden_var.get()
+            if line1 and not line1_hidden:
                 total_text_height += text_height_estimate
-            if line2:
+            if line2 and not line2_hidden:
                 total_text_height += text_height_estimate
-            if line3:
+            if line3 and not line3_hidden:
                 total_text_height += text_height_estimate
             
             # Add spacing between text lines
-            if line1 and line2:
+            if (line1 and not line1_hidden) and (line2 and not line2_hidden):
                 total_text_height += adjusted_spacing
-            if line2 and line3:
+            if (line2 and not line2_hidden) and (line3 and not line3_hidden):
                 total_text_height += adjusted_spacing
             
             # Total content height = logo + spacing + text
@@ -1955,23 +1984,33 @@ class PostcardVideoCreator:
                 self.ending_preview_canvas.create_image(logo_x, logo_y, anchor=tk.NW, image=self.ending_logo_photo)
             
             # Line 1
-            if line1:
+            if line1 and not line1_hidden:
                 color1 = color_map.get(line1_color, "#000000")
                 y1 = int(text_start_y)  # Convert to integer for consistency
                 self.ending_preview_canvas.create_text(canvas_width//2, y1, text=line1, 
                                               fill=color1, font=(line1_font, font1_size, 'bold'))
             
             # Line 2
-            if line2:
+            if line2 and not line2_hidden:
                 color2 = color_map.get(line2_color, "#000000")
-                y2 = int(text_start_y + adjusted_spacing)  # Convert to integer for consistency
+                # If line1 hidden, keep line2 at text_start_y; otherwise below line1
+                if line1 and not line1_hidden:
+                    y2 = int(text_start_y + adjusted_spacing)
+                else:
+                    y2 = int(text_start_y)
                 self.ending_preview_canvas.create_text(canvas_width//2, y2, text=line2, 
                                               fill=color2, font=(line2_font, font2_size, 'bold'))
             
             # Line 3
-            if line3:
+            if line3 and not line3_hidden:
                 color3 = color_map.get(line3_color, "#000000")
-                y3 = int(text_start_y + (adjusted_spacing * 2))  # Convert to integer for consistency
+                # Determine y3 based on which previous lines are visible
+                visible_offset = 0
+                if line1 and not line1_hidden:
+                    visible_offset += 1
+                if line2 and not line2_hidden:
+                    visible_offset += 1
+                y3 = int(text_start_y + (adjusted_spacing * max(visible_offset, 0)))
                 self.ending_preview_canvas.create_text(canvas_width//2, y3, text=line3, 
                                               fill=color3, font=(line3_font, font3_size, 'bold'))
                 
@@ -2149,6 +2188,9 @@ class PostcardVideoCreator:
                 "ending_text_spacing": self.ending_text_spacing_var.get(),
                 "ending_logo_size": self.ending_logo_size_var.get(),
                 "ending_logo_text_spacing": self.ending_logo_text_spacing_var.get(),
+                "ending_line1_hidden": self.ending_line1_hidden_var.get(),
+                "ending_line2_hidden": self.ending_line2_hidden_var.get(),
+                "ending_line3_hidden": self.ending_line3_hidden_var.get(),
                 # General settings
                 "default_duration": self.default_duration_var.get(),
                 "transition_duration": self.transition_duration_var.get(),
@@ -2213,6 +2255,9 @@ class PostcardVideoCreator:
                 self.ending_text_spacing_var.set(defaults.get("ending_text_spacing", 1))
                 self.ending_logo_size_var.set(defaults.get("ending_logo_size", 300))
                 self.ending_logo_text_spacing_var.set(defaults.get("ending_logo_text_spacing", 20))
+                self.ending_line1_hidden_var.set(defaults.get("ending_line1_hidden", False))
+                self.ending_line2_hidden_var.set(defaults.get("ending_line2_hidden", False))
+                self.ending_line3_hidden_var.set(defaults.get("ending_line3_hidden", False))
                 
                 # Load other settings
                 self.default_duration_var.set(defaults.get("default_duration", 4))
