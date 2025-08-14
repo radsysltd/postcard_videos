@@ -23,6 +23,7 @@ class PostcardVideoCreator:
         self.image_durations = []  # List of durations for each image
         self.output_path = r"C:\_postcards\renamed_postcards\videos"
         self.is_processing = False
+        self.latest_video_path = None  # Track the most recently created video
         
         # Create default output directory if it doesn't exist
         if not os.path.exists(self.output_path):
@@ -237,10 +238,15 @@ class PostcardVideoCreator:
                                        command=self.create_video, state='normal')
         self.create_button.grid(row=0, column=2, padx=(10, 0), ipadx=20, ipady=5)
         
+        # Play video button
+        self.play_button = ttk.Button(control_frame, text="▶️ PLAY VIDEO", 
+                                     command=self.play_latest_video, state='disabled')
+        self.play_button.grid(row=0, column=3, padx=(10, 0), ipadx=20, ipady=5)
+        
         # Cancel button (initially hidden)
         self.cancel_button = ttk.Button(control_frame, text="❌ CANCEL", 
                                        command=self.cancel_processing, state='normal')
-        self.cancel_button.grid(row=0, column=3, padx=(10, 0), ipadx=20, ipady=5)
+        self.cancel_button.grid(row=0, column=4, padx=(10, 0), ipadx=20, ipady=5)
         self.cancel_button.grid_remove()  # Hide initially
         
         # Add a label to show button status
@@ -340,7 +346,8 @@ class PostcardVideoCreator:
         if has_images and has_output and has_even_count:
             self.create_button.config(state='normal')
             short_path = self.output_path.replace(r"C:\_postcards\renamed_postcards\videos", "Default Videos Folder")
-            self.button_status_label.config(text=f"✅ Ready! Output: {short_path}", foreground='green')
+            play_status = " | Click 'PLAY VIDEO' to view latest" if self.latest_video_path and os.path.exists(self.latest_video_path) else ""
+            self.button_status_label.config(text=f"✅ Ready! Output: {short_path}{play_status}", foreground='green')
         else:
             self.create_button.config(state='disabled')
             if not has_images:
@@ -675,6 +682,10 @@ class PostcardVideoCreator:
             actual_minutes = int(actual_time // 60)
             actual_seconds = int(actual_time % 60)
             
+            # Store the latest video path and enable play button
+            self.latest_video_path = output_path
+            self.root.after(0, lambda: self.play_button.config(state='normal'))
+            
             # Show success message
             self.root.after(0, lambda: self.show_success_message(output_path, actual_minutes, actual_seconds))
             
@@ -938,54 +949,6 @@ class PostcardVideoCreator:
             # Create white frame (like start screen)
             frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 255
             
-            # No fade-in effect - show content immediately (like start screen)
-            # Add logo and text immediately (no fade effect)
-            
-            # Load and display logo (same as start screen)
-            logo_path = os.path.join(os.path.dirname(__file__), "images", "logo.png")
-            if os.path.exists(logo_path):
-                try:
-                    # Load logo with alpha channel
-                    logo = cv2.imread(logo_path, cv2.IMREAD_UNCHANGED)
-                    if logo is not None:
-                        # Convert BGR to RGB for correct colors
-                        if len(logo.shape) == 3 and logo.shape[2] >= 3:
-                            logo = cv2.cvtColor(logo, cv2.COLOR_BGR2RGB)
-                        # Resize logo to user-defined size (use ending logo size if available, otherwise start logo size)
-                        logo_size_video = getattr(self, 'ending_logo_size_var', self.start_logo_size_var).get()
-                        logo = cv2.resize(logo, (logo_size_video, logo_size_video))
-                        
-                        # Calculate logo position (centered, above text)
-                        logo_x = (self.video_width - logo_size_video) // 2
-                        logo_y = 50  # Top margin (same as start screen)
-                        
-                        # No fade effect - display logo immediately
-                        
-                        # Handle different image formats
-                        if len(logo.shape) == 3 and logo.shape[2] == 4:  # Has alpha channel
-                            # Convert RGBA to RGB with alpha blending
-                            alpha_channel = logo[:, :, 3] / 255.0
-                            rgb_channels = logo[:, :, :3]
-                            
-                            # Create white background for blending
-                            white_bg = np.ones_like(rgb_channels) * 255
-                            
-                            # Blend logo with white background (no fade)
-                            blended = rgb_channels * alpha_channel[:, :, np.newaxis] + \
-                                     white_bg * (1 - alpha_channel[:, :, np.newaxis])
-                            
-                            # Place logo on frame (no fade effect)
-                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = blended.astype(np.uint8)
-                            
-                        elif len(logo.shape) == 3 and logo.shape[2] == 3:  # RGB without alpha
-                            # Place logo directly (no fade)
-                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
-                        else:
-                            # Grayscale or other format - place directly (no fade)
-                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
-                except Exception as e:
-                    print(f"Error loading logo: {e}")
-            
             # Get text lines and styling (3 lines for ending)
             line1 = self.ending_line1_var.get()
             line2 = self.ending_line2_var.get()
@@ -1075,6 +1038,9 @@ class PostcardVideoCreator:
             # Text start position
             text_start_y = logo_y + logo_height + logo_text_spacing
             
+            # Update logo position to use calculated dynamic positioning
+            logo_x = (self.video_width - logo_size_video) // 2
+            
             print(f"DEBUG: Video dimensions: {self.video_width}x{self.video_height}")
             print(f"DEBUG: Total content height: {total_content_height}")
             print(f"DEBUG: Available height: {available_height}")
@@ -1084,6 +1050,44 @@ class PostcardVideoCreator:
             print(f"DEBUG: Spacing: base={base_spacing}, adjusted={adjusted_spacing}")
             
             print(f"DEBUG: Final Y positions - Line1: {text_start_y}, Line2: {text_start_y + adjusted_spacing}, Line3: {text_start_y + (adjusted_spacing * 2)}")
+            
+            # Load and display logo with calculated positioning
+            logo_path = os.path.join(os.path.dirname(__file__), "images", "logo.png")
+            if os.path.exists(logo_path):
+                try:
+                    # Load logo with alpha channel
+                    logo = cv2.imread(logo_path, cv2.IMREAD_UNCHANGED)
+                    if logo is not None:
+                        # Convert BGR to RGB for correct colors
+                        if len(logo.shape) == 3 and logo.shape[2] >= 3:
+                            logo = cv2.cvtColor(logo, cv2.COLOR_BGR2RGB)
+                        # Resize logo to user-defined size
+                        logo = cv2.resize(logo, (logo_size_video, logo_size_video))
+                        
+                        # Handle different image formats
+                        if len(logo.shape) == 3 and logo.shape[2] == 4:  # Has alpha channel
+                            # Convert RGBA to RGB with alpha blending
+                            alpha_channel = logo[:, :, 3] / 255.0
+                            rgb_channels = logo[:, :, :3]
+                            
+                            # Create white background for blending
+                            white_bg = np.ones_like(rgb_channels) * 255
+                            
+                            # Blend logo with white background
+                            blended = rgb_channels * alpha_channel[:, :, np.newaxis] + \
+                                     white_bg * (1 - alpha_channel[:, :, np.newaxis])
+                            
+                            # Place logo on frame with calculated position
+                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = blended.astype(np.uint8)
+                            
+                        elif len(logo.shape) == 3 and logo.shape[2] == 3:  # RGB without alpha
+                            # Place logo directly
+                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
+                        else:
+                            # Grayscale or other format - place directly
+                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
+                except Exception as e:
+                    print(f"Error loading logo: {e}")
             
             # Line 1
             if line1:
@@ -1144,55 +1148,6 @@ class PostcardVideoCreator:
             
             # Create white frame
             frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 255
-            
-            # No fade-in effect - show content immediately
-            # Add logo and text immediately (no fade effect)
-            
-            # Load and display logo
-            logo_path = os.path.join(os.path.dirname(__file__), "images", "logo.png")
-            if os.path.exists(logo_path):
-                try:
-                    # Load logo with alpha channel
-                    logo = cv2.imread(logo_path, cv2.IMREAD_UNCHANGED)
-                    if logo is not None:
-                        # Convert BGR to RGB for correct colors
-                        if len(logo.shape) == 3 and logo.shape[2] >= 3:
-                            logo = cv2.cvtColor(logo, cv2.COLOR_BGR2RGB)
-                        # Resize logo to user-defined size
-                        logo_size_video = self.start_logo_size_var.get()
-                        logo = cv2.resize(logo, (logo_size_video, logo_size_video))
-                        
-                        # Calculate logo position (centered, above text)
-                        logo_x = (self.video_width - logo_size_video) // 2
-                        # Use the same logo_y calculation as defined above
-                        logo_y = 50  # Top margin (same as preview)
-                        
-                        # No fade effect - display logo immediately
-                        
-                        # Handle different image formats
-                        if len(logo.shape) == 3 and logo.shape[2] == 4:  # Has alpha channel
-                            # Convert RGBA to RGB with alpha blending
-                            alpha_channel = logo[:, :, 3] / 255.0
-                            rgb_channels = logo[:, :, :3]
-                            
-                            # Create white background for blending
-                            white_bg = np.ones_like(rgb_channels) * 255
-                            
-                            # Blend logo with white background (no fade)
-                            blended = rgb_channels * alpha_channel[:, :, np.newaxis] + \
-                                     white_bg * (1 - alpha_channel[:, :, np.newaxis])
-                            
-                            # Place logo on frame (no fade effect)
-                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = blended.astype(np.uint8)
-                            
-                        elif len(logo.shape) == 3 and logo.shape[2] == 3:  # RGB without alpha
-                            # Place logo directly (no fade)
-                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
-                        else:
-                            # Grayscale or other format - place directly (no fade)
-                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
-                except Exception as e:
-                    print(f"Error loading logo: {e}")
             
             # Get text lines and styling
             line1 = self.start_line1_var.get()
@@ -1260,6 +1215,47 @@ class PostcardVideoCreator:
             # Text start position
             text_start_y = logo_y + logo_height + logo_text_spacing
             
+            # Update logo position to use calculated dynamic positioning
+            logo_x = (self.video_width - logo_size_video) // 2
+            
+            # Load and display logo with calculated positioning
+            logo_path = os.path.join(os.path.dirname(__file__), "images", "logo.png")
+            if os.path.exists(logo_path):
+                try:
+                    # Load logo with alpha channel
+                    logo = cv2.imread(logo_path, cv2.IMREAD_UNCHANGED)
+                    if logo is not None:
+                        # Convert BGR to RGB for correct colors
+                        if len(logo.shape) == 3 and logo.shape[2] >= 3:
+                            logo = cv2.cvtColor(logo, cv2.COLOR_BGR2RGB)
+                        # Resize logo to user-defined size
+                        logo = cv2.resize(logo, (logo_size_video, logo_size_video))
+                        
+                        # Handle different image formats
+                        if len(logo.shape) == 3 and logo.shape[2] == 4:  # Has alpha channel
+                            # Convert RGBA to RGB with alpha blending
+                            alpha_channel = logo[:, :, 3] / 255.0
+                            rgb_channels = logo[:, :, :3]
+                            
+                            # Create white background for blending
+                            white_bg = np.ones_like(rgb_channels) * 255
+                            
+                            # Blend logo with white background
+                            blended = rgb_channels * alpha_channel[:, :, np.newaxis] + \
+                                     white_bg * (1 - alpha_channel[:, :, np.newaxis])
+                            
+                            # Place logo on frame with calculated position
+                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = blended.astype(np.uint8)
+                            
+                        elif len(logo.shape) == 3 and logo.shape[2] == 3:  # RGB without alpha
+                            # Place logo directly
+                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
+                        else:
+                            # Grayscale or other format - place directly
+                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
+                except Exception as e:
+                    print(f"Error loading logo: {e}")
+            
             # Line 1
             if line1 and not line1_hidden:
                 color1 = color_map.get(line1_color, (0, 0, 0))
@@ -1293,7 +1289,7 @@ class PostcardVideoCreator:
             
     def show_success_message(self, output_path, minutes, seconds):
         time_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
-        self.status_label.config(text=f"✅ Video created in {time_str}! Saved to: {os.path.basename(output_path)}")
+        self.status_label.config(text=f"✅ Video created in {time_str}! Saved to: {os.path.basename(output_path)} - Click 'PLAY VIDEO' to view it!")
         
     def show_error_message(self, error_msg):
         messagebox.showerror("Error", f"Failed to create video:\n{error_msg}")
@@ -1349,6 +1345,10 @@ class PostcardVideoCreator:
             
             out.release()
             
+            # Store the latest video path and enable play button
+            self.latest_video_path = test_path
+            self.play_button.config(state='normal')
+            
             self.progress_var.set(100)
             self.status_label.config(text="Test video created successfully!")
             messagebox.showinfo("Test Success", f"Test video created successfully!\nSaved to: {test_path}\n\nThis confirms the video system is working.")
@@ -1357,6 +1357,31 @@ class PostcardVideoCreator:
             self.progress_var.set(0)
             self.status_label.config(text="Test failed")
             messagebox.showerror("Test Failed", f"Test video creation failed:\n{str(e)}")
+    
+    def play_latest_video(self):
+        """Play the most recently created video"""
+        if not self.latest_video_path or not os.path.exists(self.latest_video_path):
+            messagebox.showerror("Error", "No video has been created yet or the video file no longer exists.")
+            return
+        
+        try:
+            import subprocess
+            import platform
+            
+            system = platform.system()
+            if system == "Windows":
+                os.startfile(self.latest_video_path)
+            elif system == "Darwin":  # macOS
+                subprocess.run(["open", self.latest_video_path])
+            else:  # Linux
+                subprocess.run(["xdg-open", self.latest_video_path])
+            
+            self.status_label.config(text=f"🎬 Playing video: {os.path.basename(self.latest_video_path)}")
+            
+        except Exception as e:
+            error_msg = f"Failed to play video: {str(e)}"
+            self.status_label.config(text=f"❌ {error_msg}")
+            messagebox.showerror("Error", error_msg)
     
     def save_defaults(self):
         """Save current settings as defaults"""
@@ -1672,7 +1697,7 @@ class PostcardVideoCreator:
         self.update_start_preview()
     
     def update_start_preview(self):
-        """Update the live preview of the start text"""
+        """Update the live preview of the start text to match video output exactly"""
         try:
             # Clear the canvas
             self.start_preview_canvas.delete("all")
@@ -1691,7 +1716,7 @@ class PostcardVideoCreator:
             logo_text_spacing = self.start_logo_text_spacing_var.get()
             line1_hidden = self.start_line1_hidden_var.get()
             
-            # Color mapping
+            # Color mapping (RGB format to match video)
             color_map = {
                 "black": "#000000",
                 "white": "#FFFFFF",
@@ -1742,12 +1767,12 @@ class PostcardVideoCreator:
                 except Exception as e:
                     print(f"Error loading logo for preview: {e}")
             
-            # Calculate font sizes proportionally
+            # Calculate font sizes proportionally (match video scaling)
             preview_font_scale = int(25 * height_scale)  # Scale based on height ratio
             font1_size = max(8, int(line1_size * preview_font_scale))  # Minimum size of 8
             font2_size = max(8, int(line2_size * preview_font_scale))
             
-            # DYNAMIC VERTICAL CENTERING FOR START PREVIEW - Same logic as video
+            # EXACT SAME POSITIONING LOGIC AS VIDEO - copy from create_start_clip
             logo_height = logo_size_preview
             base_spacing = int(80 * height_scale)
             adjusted_spacing = base_spacing + (text_spacing * int(10 * height_scale))
@@ -1765,11 +1790,10 @@ class PostcardVideoCreator:
                 total_text_height += adjusted_spacing
             
             # Total content height = logo + spacing + text
-            # logo_text_spacing from UI might be in a different scale, try using it directly like video does
             total_content_height = logo_height + logo_text_spacing + total_text_height
             
-            # Calculate starting Y position to center everything
-            available_height = canvas_height - int(100 * height_scale)  # Scale margins
+            # Calculate starting Y position to center everything (EXACT SAME AS VIDEO)
+            available_height = canvas_height - int(100 * height_scale)  # Leave 50px margins top and bottom
             start_y = (available_height - total_content_height) // 2 + int(50 * height_scale)  # Center and add top margin
             
             # Logo position
@@ -1786,7 +1810,7 @@ class PostcardVideoCreator:
             # Line 1
             if line1 and not line1_hidden:
                 color1 = color_map.get(line1_color, "#000000")
-                y1 = text_start_y
+                y1 = int(text_start_y)  # Convert to integer for consistency
                 self.start_preview_canvas.create_text(canvas_width//2, y1, text=line1, 
                                                     fill=color1, font=(line1_font, font1_size, 'bold'))
             
@@ -1794,11 +1818,11 @@ class PostcardVideoCreator:
             if line2:
                 color2 = color_map.get(line2_color, "#000000")
                 if line1_hidden:
-                    # If line 1 is hidden, line 2 uses the logo-text spacing directly
-                    y2 = text_start_y
+                    # If line 1 is hidden, line 2 uses the text start position
+                    y2 = int(text_start_y)  # Convert to integer for consistency
                 else:
                     # If line 1 is visible, line 2 is positioned below it
-                    y2 = text_start_y + adjusted_spacing
+                    y2 = int(text_start_y + adjusted_spacing)  # Convert to integer for consistency
                 self.start_preview_canvas.create_text(canvas_width//2, y2, text=line2, 
                                                     fill=color2, font=(line2_font, font2_size, 'bold'))
                 
@@ -1806,7 +1830,7 @@ class PostcardVideoCreator:
             print(f"Start preview update error: {e}")
     
     def update_ending_preview(self):
-        """Update the live preview of the ending text (like start screen but with 3 lines)"""
+        """Update the live preview of the ending text to match video output exactly"""
         try:
             # Clear the canvas
             self.ending_preview_canvas.delete("all")
@@ -1828,7 +1852,7 @@ class PostcardVideoCreator:
             logo_size = self.ending_logo_size_var.get()
             logo_text_spacing = self.ending_logo_text_spacing_var.get()
             
-            # Color mapping (same as start screen)
+            # Color mapping (RGB format to match video)
             color_map = {
                 "black": "#000000",
                 "white": "#FFFFFF",
@@ -1854,9 +1878,9 @@ class PostcardVideoCreator:
             width_scale = canvas_width / video_width
             height_scale = canvas_height / video_height
             
-            # Load and display logo (same as start screen)
+            # Load and display logo
             logo_path = os.path.join(os.path.dirname(__file__), "images", "logo.png")
-            logo_y_offset = 0
+            logo_size_preview = 0
             if os.path.exists(logo_path):
                 try:
                     from PIL import Image, ImageTk
@@ -1876,21 +1900,16 @@ class PostcardVideoCreator:
                     # Store reference to prevent garbage collection
                     self.ending_logo_photo = logo_photo
                     
-                    # Store logo reference for later positioning
-                    self.ending_logo_photo = logo_photo
-                    
                 except Exception as e:
                     print(f"Error loading logo for ending preview: {e}")
-            else:
-                print(f"Logo file not found at {logo_path}")
             
-            # Calculate font sizes proportionally
+            # Calculate font sizes proportionally (match video scaling)
             preview_font_scale = int(25 * height_scale)  # Scale based on height ratio
             font1_size = max(8, int(line1_size * preview_font_scale))  # Minimum size of 8
             font2_size = max(8, int(line2_size * preview_font_scale))
             font3_size = max(8, int(line3_size * preview_font_scale))
             
-            # DYNAMIC VERTICAL CENTERING FOR PREVIEW - Same logic as video
+            # EXACT SAME POSITIONING LOGIC AS VIDEO - copy from create_ending_clip
             logo_height = logo_size_preview
             base_spacing = int(80 * height_scale)
             adjusted_spacing = base_spacing + (text_spacing * int(10 * height_scale))
@@ -1914,8 +1933,8 @@ class PostcardVideoCreator:
             # Total content height = logo + spacing + text
             total_content_height = logo_height + logo_text_spacing + total_text_height
             
-            # Calculate starting Y position to center everything
-            available_height = canvas_height - int(100 * height_scale)  # Scale margins
+            # Calculate starting Y position to center everything (EXACT SAME AS VIDEO)
+            available_height = canvas_height - int(100 * height_scale)  # Leave 50px margins top and bottom
             start_y = (available_height - total_content_height) // 2 + int(50 * height_scale)  # Center and add top margin
             
             # Logo position
@@ -1924,7 +1943,7 @@ class PostcardVideoCreator:
             # Text start position
             text_start_y = logo_y + logo_height + logo_text_spacing
             
-            # Reposition logo to centered position
+            # Display logo at calculated position
             if hasattr(self, 'ending_logo_photo'):
                 logo_x = (canvas_width - logo_size_preview) // 2
                 self.ending_preview_canvas.create_image(logo_x, logo_y, anchor=tk.NW, image=self.ending_logo_photo)
@@ -1932,21 +1951,21 @@ class PostcardVideoCreator:
             # Line 1
             if line1:
                 color1 = color_map.get(line1_color, "#000000")
-                y1 = text_start_y
+                y1 = int(text_start_y)  # Convert to integer for consistency
                 self.ending_preview_canvas.create_text(canvas_width//2, y1, text=line1, 
                                               fill=color1, font=(line1_font, font1_size, 'bold'))
             
             # Line 2
             if line2:
                 color2 = color_map.get(line2_color, "#000000")
-                y2 = text_start_y + adjusted_spacing
+                y2 = int(text_start_y + adjusted_spacing)  # Convert to integer for consistency
                 self.ending_preview_canvas.create_text(canvas_width//2, y2, text=line2, 
                                               fill=color2, font=(line2_font, font2_size, 'bold'))
             
             # Line 3
             if line3:
                 color3 = color_map.get(line3_color, "#000000")
-                y3 = text_start_y + (adjusted_spacing * 2)
+                y3 = int(text_start_y + (adjusted_spacing * 2))  # Convert to integer for consistency
                 self.ending_preview_canvas.create_text(canvas_width//2, y3, text=line3, 
                                               fill=color3, font=(line3_font, font3_size, 'bold'))
                 
