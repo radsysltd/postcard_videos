@@ -1774,11 +1774,11 @@ class PostcardVideoCreator:
             
             # EXACT SAME POSITIONING LOGIC AS VIDEO - copy from create_start_clip
             logo_height = logo_size_preview
-            base_spacing = int(80 * height_scale)
-            adjusted_spacing = base_spacing + (text_spacing * int(10 * height_scale))
+            base_spacing = 80  # Same as video - no scaling
+            adjusted_spacing = base_spacing + (text_spacing * 10)  # Same as video - no scaling
             
             # Calculate text heights (approximate)
-            text_height_estimate = int(50 * height_scale)  # Scale text height estimate
+            text_height_estimate = 50  # Same as video - no scaling
             total_text_height = 0
             if line1 and not line1_hidden:
                 total_text_height += text_height_estimate
@@ -1793,8 +1793,8 @@ class PostcardVideoCreator:
             total_content_height = logo_height + logo_text_spacing + total_text_height
             
             # Calculate starting Y position to center everything (EXACT SAME AS VIDEO)
-            available_height = canvas_height - int(100 * height_scale)  # Leave 50px margins top and bottom
-            start_y = (available_height - total_content_height) // 2 + int(50 * height_scale)  # Center and add top margin
+            available_height = canvas_height - 100  # Same as video - no scaling
+            start_y = (available_height - total_content_height) // 2 + 50  # Same as video - no scaling
             
             # Logo position
             logo_y = start_y
@@ -1911,11 +1911,11 @@ class PostcardVideoCreator:
             
             # EXACT SAME POSITIONING LOGIC AS VIDEO - copy from create_ending_clip
             logo_height = logo_size_preview
-            base_spacing = int(80 * height_scale)
-            adjusted_spacing = base_spacing + (text_spacing * int(10 * height_scale))
+            base_spacing = int(80 * height_scale)  # Scale for preview
+            adjusted_spacing = base_spacing + (text_spacing * int(10 * height_scale))  # Scale for preview
             
             # Calculate text heights (approximate)
-            text_height_estimate = int(50 * height_scale)  # Scale text height estimate
+            text_height_estimate = int(50 * height_scale)  # Scale for preview
             total_text_height = 0
             if line1:
                 total_text_height += text_height_estimate
@@ -1934,8 +1934,8 @@ class PostcardVideoCreator:
             total_content_height = logo_height + logo_text_spacing + total_text_height
             
             # Calculate starting Y position to center everything (EXACT SAME AS VIDEO)
-            available_height = canvas_height - int(100 * height_scale)  # Leave 50px margins top and bottom
-            start_y = (available_height - total_content_height) // 2 + int(50 * height_scale)  # Center and add top margin
+            available_height = canvas_height - int(100 * height_scale)  # Scale for preview
+            start_y = (available_height - total_content_height) // 2 + int(50 * height_scale)  # Scale for preview
             
             # Logo position
             logo_y = start_y
