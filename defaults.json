@@ -50,8 +50,8 @@
   "default_duration": "4",
   "transition_duration": "1.0",
   "effect": "fade",
-  "music": "Vintage Memories",
+  "music": "Random",
   "music_volume": 0.3,
-  "background_color": "gray",
+  "background_color": "light_gray",
   "starting_part_number": 1
 }
