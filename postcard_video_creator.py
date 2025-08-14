@@ -114,6 +114,7 @@ class PostcardVideoCreator:
         self.output_path = r"C:\_postcards\renamed_postcards\videos"
         self.is_processing = False
         self.latest_video_path = None  # Track the most recently created video
+        self.video_parts = []  # Track all created video parts for selection
         
         # Create default output directory if it doesn't exist
         if not os.path.exists(self.output_path):
@@ -130,11 +131,14 @@ class PostcardVideoCreator:
         # Video settings
         self.default_duration = 4  # seconds
         self.transition_duration = 1.0  # seconds
-        self.video_width = 1920
+        self.video_width = 1080
         self.video_height = 1080
         
         # Background color for square format
-        self.background_color_var = tk.StringVar(value="white")
+        self.background_color_var = tk.StringVar(value="light_gray")
+        
+        # Starting part number for video naming
+        self.starting_part_var = tk.IntVar(value=1)
 
         # Global fade options
         self.start_fade_in_var = tk.BooleanVar(value=False)
@@ -159,9 +163,9 @@ class PostcardVideoCreator:
         self.ending_line1_size_var = tk.DoubleVar(value=1.5)
         self.ending_line2_size_var = tk.DoubleVar(value=1.5)
         self.ending_line3_size_var = tk.DoubleVar(value=1.5)
-        self.ending_line1_color_var = tk.StringVar(value="white")
-        self.ending_line2_color_var = tk.StringVar(value="white")
-        self.ending_line3_color_var = tk.StringVar(value="white")
+        self.ending_line1_color_var = tk.StringVar(value="black")
+        self.ending_line2_color_var = tk.StringVar(value="black")
+        self.ending_line3_color_var = tk.StringVar(value="black")
         self.ending_line1_font_var = tk.StringVar(value="Arial")
         self.ending_line2_font_var = tk.StringVar(value="Arial")
         self.ending_line3_font_var = tk.StringVar(value="Arial")
@@ -236,7 +240,7 @@ class PostcardVideoCreator:
         
         # Resolution settings
         ttk.Label(settings_frame, text="Video Resolution:").grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
-        self.resolution_var = tk.StringVar(value="1920x1080")
+        self.resolution_var = tk.StringVar(value="1080x1080 (Square)")
         resolution_combo = ttk.Combobox(settings_frame, textvariable=self.resolution_var, 
                                        values=["1920x1080", "1280x720", "3840x2160", "1080x1080 (Square)", "720x720 (Square)"], width=18)
         resolution_combo.grid(row=1, column=1, sticky=tk.W, pady=(10, 0), padx=(0, 20))
@@ -253,9 +257,9 @@ class PostcardVideoCreator:
         
         # Music settings
         ttk.Label(settings_frame, text="Background Music:").grid(row=2, column=0, sticky=tk.W, pady=(10, 0))
-        self.music_var = tk.StringVar(value="Vintage Memories")
+        self.music_var = tk.StringVar(value="Random")
         music_combo = ttk.Combobox(settings_frame, textvariable=self.music_var,
-                                  values=["None", "Vintage Memories", "Nostalgic Journey", 
+                                  values=["None", "Random", "Vintage Memories", "Nostalgic Journey", 
                                          "Classic Charm", "Peaceful Moments"], width=15)
         music_combo.grid(row=2, column=1, sticky=tk.W, pady=(10, 0), padx=(0, 20))
         
@@ -277,6 +281,11 @@ class PostcardVideoCreator:
                                                    "red", "green", "blue", "yellow", "cyan", "magenta", 
                                                    "orange", "purple", "brown", "pink", "navy"], width=15)
         background_color_combo.grid(row=3, column=1, sticky=tk.W, pady=(10, 0), padx=(0, 20))
+        
+        # Starting part number setting
+        ttk.Label(settings_frame, text="Starting Part Number:").grid(row=3, column=2, sticky=tk.W, pady=(10, 0), padx=(20, 0))
+        starting_part_spinbox = ttk.Spinbox(settings_frame, from_=1, to=999, textvariable=self.starting_part_var, width=8)
+        starting_part_spinbox.grid(row=3, column=3, sticky=tk.W, pady=(10, 0), padx=(0, 10))
         
         # Ending text configuration button
         ending_config_button = ttk.Button(settings_frame, text="🎬 Configure Ending Text", command=self.open_ending_config)
@@ -366,15 +375,22 @@ class PostcardVideoCreator:
                                        command=self.create_video, state='normal')
         self.create_button.grid(row=0, column=2, padx=(10, 0), ipadx=20, ipady=5)
         
+        # Part selector dropdown
+        ttk.Label(control_frame, text="Part:").grid(row=0, column=3, padx=(10, 0), sticky=tk.E)
+        self.part_selector_var = tk.StringVar(value="Latest")
+        self.part_selector = ttk.Combobox(control_frame, textvariable=self.part_selector_var,
+                                         values=["Latest"], width=24, state="readonly")
+        self.part_selector.grid(row=0, column=4, padx=(5, 0))
+        
         # Play video button
         self.play_button = ttk.Button(control_frame, text="▶️ PLAY VIDEO", 
-                                     command=self.play_latest_video, state='disabled')
-        self.play_button.grid(row=0, column=3, padx=(10, 0), ipadx=20, ipady=5)
+                                     command=self.play_selected_video, state='disabled')
+        self.play_button.grid(row=0, column=5, padx=(10, 0), ipadx=20, ipady=5)
         
         # Cancel button (initially hidden)
         self.cancel_button = ttk.Button(control_frame, text="❌ CANCEL", 
                                        command=self.cancel_processing, state='normal')
-        self.cancel_button.grid(row=0, column=4, padx=(10, 0), ipadx=20, ipady=5)
+        self.cancel_button.grid(row=0, column=6, padx=(10, 0), ipadx=20, ipady=5)
         self.cancel_button.grid_remove()  # Hide initially
         
         # Add a label to show button status
@@ -385,7 +401,7 @@ class PostcardVideoCreator:
         # Add a test button for quick verification
         self.test_button = ttk.Button(control_frame, text="🧪 TEST VIDEO", 
                                      command=self.test_video_creation, state='normal')
-        self.test_button.grid(row=1, column=2, padx=(10, 0), pady=(5, 0))
+        self.test_button.grid(row=1, column=5, padx=(10, 0), pady=(5, 0))
         
         # Configure grid weights for proper resizing
         main_frame.rowconfigure(3, weight=1)
@@ -1047,7 +1063,20 @@ class PostcardVideoCreator:
             messagebox.showerror("Error", "Please select an output folder")
             return
             
-        print("DEBUG: All validations passed, starting video creation")  # Debug output
+        print("DEBUG: All validations passed, checking if batching is needed")  # Debug output
+        
+        # Check if we need to create multiple videos due to length
+        batches = self.calculate_video_batches()
+        
+        if len(batches) > 1:
+            # Multiple videos needed
+            result = messagebox.askyesno("Multiple Videos", 
+                f"Your content is {self.calculate_total_postcard_duration():.1f} seconds long.\n\n"
+                f"This will be split into {len(batches)} videos of approximately 60 seconds each.\n\n"
+                f"Do you want to proceed with batch creation?")
+            if not result:
+                return
+        
         # Start processing in separate thread
         self.is_processing = True
         self.create_button.config(state='disabled')
@@ -1055,10 +1084,490 @@ class PostcardVideoCreator:
         self.status_label.config(text="Starting video creation...")
         self.progress_var.set(0)
         
-        thread = threading.Thread(target=self.process_video)
+        thread = threading.Thread(target=self.process_videos_in_batches, args=(batches,))
         thread.daemon = True
         thread.start()
+    
+    def calculate_total_postcard_duration(self):
+        """Calculate total duration of all postcard images"""
+        return sum(self.image_durations)
+    
+    def calculate_video_batches(self):
+        """Split postcards into batches of approximately 60 seconds each, with minimum 5 pairs per batch"""
+        max_duration_per_video = 60.0  # Maximum seconds of postcard content per video
+        min_pairs_per_video = 5  # Minimum number of postcard pairs per video
         
+        total_pairs = len(self.postcard_images) // 2
+        
+        # If we have fewer than minimum pairs total, return single batch
+        if total_pairs < min_pairs_per_video:
+            logging.info(f"DEBUG: Only {total_pairs} pairs total, creating single video")
+            return [list(range(len(self.postcard_images)))]
+        
+        batches = []
+        current_batch = []
+        current_duration = 0.0
+        
+        # Calculate durations for each pair
+        pair_durations = []
+        for i in range(0, len(self.postcard_images), 2):
+            if i + 1 >= len(self.postcard_images):
+                break
+            front_duration = self.image_durations[i]
+            back_duration = self.image_durations[i + 1]
+            pair_durations.append(front_duration + back_duration)
+        
+        # Process images in pairs (front and back)
+        for pair_idx, i in enumerate(range(0, len(self.postcard_images), 2)):
+            if i + 1 >= len(self.postcard_images):
+                break  # Ensure we have a complete pair
+                
+            pair_duration = pair_durations[pair_idx]
+            
+            # Check if adding this pair would exceed the limit AND we have minimum pairs
+            current_pairs = len(current_batch) // 2
+            if (current_duration + pair_duration > max_duration_per_video and 
+                current_pairs >= min_pairs_per_video):
+                # Start a new batch
+                batches.append(current_batch)
+                current_batch = []
+                current_duration = 0.0
+            
+            # Add the pair to current batch
+            current_batch.extend([i, i + 1])  # Add indices for front and back
+            current_duration += pair_duration
+        
+        # Add the last batch if it has content
+        if current_batch:
+            batches.append(current_batch)
+        
+        # Post-process: ensure no batch has fewer than minimum pairs (except if only one batch)
+        if len(batches) > 1:
+            logging.info(f"DEBUG: Before adjustment: {len(batches)} batches")
+            batches = self._ensure_minimum_pairs_per_batch(batches, min_pairs_per_video)
+            logging.info(f"DEBUG: After adjustment: {len(batches)} batches")
+        
+        # Log the final batching decision
+        for i, batch in enumerate(batches):
+            pairs_count = len(batch) // 2
+            batch_duration = sum(pair_durations[j] for j in range(len(batch) // 2) if j < len(pair_durations))
+            logging.info(f"DEBUG: Batch {i+1}: {pairs_count} pairs, {batch_duration:.1f}s duration")
+        
+        return batches
+    
+    def _ensure_minimum_pairs_per_batch(self, batches, min_pairs_per_video):
+        """Ensure no batch has fewer than minimum pairs by redistributing or merging"""
+        if not batches:
+            return batches
+            
+        # Check if any batch (except possibly the last) has too few pairs
+        adjusted_batches = []
+        i = 0
+        
+        while i < len(batches):
+            current_batch = batches[i]
+            current_pairs = len(current_batch) // 2
+            
+            # If this batch has enough pairs, add it as-is
+            if current_pairs >= min_pairs_per_video:
+                adjusted_batches.append(current_batch)
+                i += 1
+            else:
+                # This batch has too few pairs
+                if i == len(batches) - 1:
+                    # Last batch with too few pairs - merge with previous batch
+                    if adjusted_batches:
+                        logging.info(f"DEBUG: Merging last batch ({current_pairs} pairs) with previous batch")
+                        adjusted_batches[-1].extend(current_batch)
+                    else:
+                        # Only one batch total, keep it
+                        adjusted_batches.append(current_batch)
+                else:
+                    # Not the last batch - merge with next batch
+                    logging.info(f"DEBUG: Merging batch ({current_pairs} pairs) with next batch")
+                    next_batch = batches[i + 1]
+                    merged_batch = current_batch + next_batch
+                    adjusted_batches.append(merged_batch)
+                    i += 2  # Skip the next batch since we merged it
+                    continue
+                i += 1
+        
+        return adjusted_batches
+    
+    def _get_random_music(self):
+        """Get a random music track from available options"""
+        import random
+        available_music = ["Vintage Memories", "Nostalgic Journey", "Classic Charm", "Peaceful Moments"]
+        return random.choice(available_music)
+    
+    def process_videos_in_batches(self, batches):
+        """Process multiple videos based on the calculated batches"""
+        try:
+            total_videos = len(batches)
+            original_line1 = self.start_line1_var.get()
+            videos_created = []
+            
+            for batch_index, batch_indices in enumerate(batches):
+                try:
+                    # Update progress
+                    overall_progress = (batch_index / total_videos) * 100
+                    self.root.after(0, lambda p=overall_progress: self.progress_var.set(p))
+                    
+                    # Calculate actual part number using starting part number
+                    actual_part_number = self.starting_part_var.get() + batch_index
+                    
+                    # Always update start screen text with part number
+                    part_text = f"{original_line1} (Part {actual_part_number})"
+                    logging.info(f"DEBUG: Updating start text to: '{part_text}' (starting from part {self.starting_part_var.get()})")
+                    self.start_line1_var.set(part_text)
+                    
+                    if total_videos > 1:
+                        self.root.after(0, lambda b=batch_index, t=total_videos: 
+                                      self.status_label.config(text=f"Creating video {b+1} of {t}..."))
+                    else:
+                        self.root.after(0, lambda: self.status_label.config(text="Creating video..."))
+                    
+                    # Create video for this batch
+                    video_path = self.process_single_batch_video(batch_indices, actual_part_number, total_videos)
+                    if video_path:
+                        videos_created.append(video_path)
+                    
+                except Exception as e:
+                    logging.error(f"Error creating batch {batch_index + 1}: {e}")
+                    continue
+            
+            # Restore original start line text
+            self.start_line1_var.set(original_line1)
+            
+            # Update video parts list and UI
+            self.update_video_parts_list(videos_created, original_line1, total_videos)
+            
+            # Show completion message
+            if videos_created:
+                self.latest_video_path = videos_created[-1]  # Set to last created video
+                self.root.after(0, lambda: self.play_button.config(state='normal'))
+                
+                if len(videos_created) > 1:
+                    self.root.after(0, lambda: self.show_batch_success_message(videos_created))
+                else:
+                    # Single video - show normal success message
+                    import time
+                    actual_time = 60  # Approximate
+                    self.root.after(0, lambda: self.show_success_message(videos_created[0], 1, 0))
+            else:
+                self.root.after(0, lambda: self.show_error_message("No videos were created successfully"))
+                
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            full_traceback = traceback.format_exc()
+            print(f"ERROR: Batch video creation failed: {error_msg}")
+            print(f"FULL TRACEBACK: {full_traceback}")
+            self.root.after(0, lambda: self.show_error_message(error_msg))
+        finally:
+            self.root.after(0, self.finish_processing)
+    
+    def process_single_batch_video(self, batch_indices, part_number, total_parts):
+        """Process a single video from a batch of image indices"""
+        try:
+            logging.info(f"DEBUG: Starting batch video {part_number}/{total_parts} with {len(batch_indices)} images")
+            clips = []
+            
+            # Add start clip
+            self.root.after(0, lambda: self.status_label.config(text="Creating start clip..."))
+            start_duration = self.start_duration_var.get()
+            
+            # Apply the same fade logic as the original process_video method
+            # Don't apply fade-out to start clip if we're creating a manual transition
+            will_create_manual_transition = len(batch_indices) > 0 and self.start_fade_out_var.get()
+            apply_fade_out = self.start_fade_out_var.get() and not will_create_manual_transition
+            logging.info(f"DEBUG: Fade logic - batch_images: {len(batch_indices)}, fade_out_enabled: {self.start_fade_out_var.get()}")
+            logging.info(f"DEBUG: will_create_manual_transition: {will_create_manual_transition}, apply_fade_out: {apply_fade_out}")
+            
+            logging.info(f"DEBUG: Creating start clip with duration {start_duration}s")
+            start_clip = self.create_start_clip(duration=start_duration, apply_fade_out=apply_fade_out)
+            if start_clip is None:
+                raise Exception("Failed to create start clip")
+            logging.info(f"DEBUG: Start clip created successfully")
+            clips.append(start_clip)
+            
+            # Process postcard pairs in this batch
+            for i in range(0, len(batch_indices), 2):
+                if i + 1 >= len(batch_indices):
+                    break
+                    
+                front_idx = batch_indices[i]
+                back_idx = batch_indices[i + 1]
+                
+                front_path = self.postcard_images[front_idx]
+                back_path = self.postcard_images[back_idx]
+                front_duration = self.image_durations[front_idx]
+                back_duration = self.image_durations[back_idx]
+                
+                logging.info(f"DEBUG: Processing pair {i//2 + 1}, front: {front_path}, back: {back_path}")
+                logging.info(f"DEBUG: Durations - front: {front_duration}s, back: {back_duration}s")
+                
+                # Create clips
+                logging.info(f"DEBUG: Creating front clip...")
+                front_clip = self.create_image_clip(front_path, front_duration)
+                if front_clip is None:
+                    raise Exception(f"Failed to create front clip for: {front_path}")
+                logging.info(f"DEBUG: Front clip created successfully")
+                
+                # If this is the first front clip and start fade-out is enabled, create manual transition
+                if i == 0 and self.start_fade_out_var.get():
+                    logging.info(f"DEBUG: Creating manual fade transition from start to first postcard")
+                    start_to_front = self.create_fade_transition(start_clip, front_clip)
+                    clips.extend([start_to_front, front_clip])
+                    logging.info(f"DEBUG: Manual transition created, clips now: {len(clips)}")
+                else:
+                    logging.info(f"DEBUG: No manual transition, adding front clip directly")
+                    clips.append(front_clip)
+                    
+                logging.info(f"DEBUG: Creating back clip...")
+                back_clip = self.create_image_clip(back_path, back_duration)
+                if back_clip is None:
+                    raise Exception(f"Failed to create back clip for: {back_path}")
+                logging.info(f"DEBUG: Back clip created successfully")
+                
+                # Add transition between front and back
+                if self.transition_duration > 0:
+                    transition = self.create_transition(front_clip, back_clip)
+                    clips.extend([transition, back_clip])
+                else:
+                    clips.append(back_clip)
+                
+                # Add transition to next postcard (except for last one)
+                if i < len(batch_indices) - 2:
+                    next_front_idx = batch_indices[i + 2]
+                    next_front_path = self.postcard_images[next_front_idx]
+                    next_front_clip = self.create_image_clip(next_front_path, 0.1)
+                    transition = self.create_transition(back_clip, next_front_clip)
+                    clips.append(transition)
+            
+            # Add ending clip
+            self.root.after(0, lambda: self.status_label.config(text="Adding ending clip..."))
+            ending_duration = self.ending_duration_var.get()
+            logging.info(f"DEBUG: Creating ending clip with duration {ending_duration}s")
+            ending_clip = self.create_ending_clip(duration=ending_duration)
+            if ending_clip is None:
+                raise Exception("Failed to create ending clip")
+            logging.info(f"DEBUG: Ending clip created successfully")
+            clips.append(ending_clip)
+            
+            # Concatenate clips
+            self.root.after(0, lambda: self.status_label.config(text="Concatenating clips..."))
+            logging.info(f"DEBUG: About to concatenate {len(clips)} clips for batch video")
+            final_video = concatenate_videoclips(clips, method="compose")
+            logging.info(f"DEBUG: Clips concatenated successfully for batch video")
+            
+            # Generate output filename using Line 1 text from start screen
+            line1_text = self.start_line1_var.get()
+            # Sanitize filename by removing invalid characters
+            safe_filename = "".join(c for c in line1_text if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_filename = safe_filename.replace(' ', '_')
+            
+            if not safe_filename:  # Fallback if no valid characters
+                safe_filename = "postcard_video"
+            
+            # Add timestamp for uniqueness
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Always use part numbers in filename, include dimensions
+            dimensions = f"{self.video_width}x{self.video_height}"
+            output_filename = f"{safe_filename}_Part{part_number}_{timestamp}_{dimensions}.mp4"
+            output_path = os.path.join(self.output_path, output_filename)
+            
+            logging.info(f"DEBUG: Generated filename: {output_filename} from Line1: '{line1_text}' (Part {part_number})")
+            
+            # Write video file using the same method as the main process_video
+            self.root.after(0, lambda: self.status_label.config(text="Writing video file..."))
+            
+            # Use OpenCV to create video instead of MoviePy (more reliable)
+            import cv2
+            
+            # Get video dimensions
+            width, height = self.video_width, self.video_height
+            
+            # Create video writer
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(output_path, fourcc, 10.0, (width, height))
+            
+            # Check if video writer opened successfully
+            if not out.isOpened():
+                raise Exception(f"Failed to open video writer for {output_path}")
+            logging.info(f"DEBUG: Video writer opened successfully for {output_path}")
+            
+            # Handle background music
+            music_path = None
+            if self.music_var.get() != "None":
+                # Handle random music selection
+                if self.music_var.get() == "Random":
+                    selected_music = self._get_random_music()
+                    logging.info(f"DEBUG: Random music selected: {selected_music}")
+                else:
+                    selected_music = self.music_var.get()
+                
+                music_filename_wav = selected_music.replace(' ', '_').lower() + '.wav'
+                music_filename_mp3 = selected_music.replace(' ', '_').lower() + '.mp3'
+                music_path_wav = os.path.join('music', music_filename_wav)
+                music_path_mp3 = os.path.join('music', music_filename_mp3)
+                
+                # Check which file exists
+                if os.path.exists(music_path_mp3):
+                    music_path = music_path_mp3
+                    self.root.after(0, lambda: self.status_label.config(text="Adding background music..."))
+                elif os.path.exists(music_path_wav):
+                    music_path = music_path_wav
+                    self.root.after(0, lambda: self.status_label.config(text="Adding background music..."))
+                else:
+                    music_path = None  # Music file not found
+            
+            # Process each clip and write frames
+            total_frames = 0
+            logging.info(f"DEBUG: Starting to write {len(clips)} clips to video file")
+            for clip_idx, clip in enumerate(clips):
+                duration = clip.duration
+                fps = 10  # 10 FPS for reliability
+                num_frames = int(duration * fps)
+                
+                # Check if this is the ending clip (last clip)
+                is_ending_clip = clip_idx == len(clips) - 1
+                clip_type = "ENDING CLIP" if is_ending_clip else f"clip {clip_idx + 1}"
+                logging.info(f"DEBUG: Processing {clip_type}/{len(clips)}, duration: {duration}s, frames: {num_frames}")
+                
+                for i in range(num_frames):
+                    # Get frame at time t
+                    t = i / fps
+                    if t <= duration:
+                        frame = clip.get_frame(t)
+                        
+                        # Ensure frame is in correct format for OpenCV
+                        # MoviePy may return float64, but OpenCV needs uint8
+                        if frame.dtype != np.uint8:
+                            original_dtype = frame.dtype
+                            # Convert from [0,1] float to [0,255] uint8 if needed
+                            if frame.max() <= 1.0:
+                                frame = (frame * 255).astype(np.uint8)
+                            else:
+                                frame = frame.astype(np.uint8)
+                            
+                            # Log the conversion for debugging (only once per clip)
+                            if i == 0:
+                                    logging.info(f"DEBUG: Converted frame from {original_dtype} to {frame.dtype} for clip {clip_idx + 1}")
+                        
+                        # Convert RGB to BGR for OpenCV
+                        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                        out.write(frame_bgr)
+                        
+                        # Update progress occasionally
+                        total_frames += 1
+                        if total_frames % 50 == 0:  # Update every 50 frames and print debug
+                            progress = 90 + (total_frames / (len(clips) * 30)) * 9  # Rough estimate
+                            logging.info(f"DEBUG: Written {total_frames} frames so far")
+                            # Don't update progress too frequently to avoid blocking
+                
+                logging.info(f"DEBUG: Completed clip {clip_idx + 1}/{len(clips)}")
+            
+            out.release()
+            
+            # Add background music if selected
+            if music_path and os.path.exists(music_path):
+                self.root.after(0, lambda: self.status_label.config(text="Adding background music to video..."))
+                
+                # Create temporary video with audio
+                temp_video_path = output_path.replace('.mp4', '_temp.mp4')
+                os.rename(output_path, temp_video_path)
+                
+                try:
+                    # Use ffmpeg to add audio (if available)
+                    import subprocess
+                    # Calculate fade-out duration (last 3 seconds)
+                    video_duration = final_video.duration
+                    fade_duration = min(3.0, video_duration * 0.3)  # 3 seconds or 30% of video, whichever is shorter
+                    
+                    cmd = [
+                        'ffmpeg', '-y',
+                        '-i', temp_video_path,
+                        '-i', music_path,
+                        '-c:v', 'copy',
+                        '-c:a', 'aac',
+                        '-shortest',
+                        '-filter:a', f'volume={self.music_volume_var.get()},afade=t=out:st={video_duration-fade_duration}:d={fade_duration}',
+                        output_path
+                    ]
+                    
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        # Success - remove temp file
+                        os.remove(temp_video_path)
+                        self.root.after(0, lambda: self.status_label.config(text="Music added successfully!"))
+                    else:
+                        # FFmpeg failed - keep video without audio
+                        os.rename(temp_video_path, output_path)
+                        self.root.after(0, lambda: self.status_label.config(text="Video created (music not added)"))
+                        
+                except Exception as e:
+                    # FFmpeg not available - keep video without audio
+                    os.rename(temp_video_path, output_path)
+                    self.root.after(0, lambda: self.status_label.config(text="Video created (music not added)"))
+            
+            # Clean up
+            final_video.close()
+            for clip in clips:
+                clip.close()
+            
+            return output_path
+            
+        except Exception as e:
+            import traceback
+            error_msg = f"Error creating single batch video: {str(e)}"
+            full_traceback = traceback.format_exc()
+            logging.error(f"ERROR in process_single_batch_video: {error_msg}")
+            logging.error(f"FULL TRACEBACK: {full_traceback}")
+            return None
+        
+    def update_video_parts_list(self, video_paths, original_title, total_parts):
+        """Update the video parts list and dropdown"""
+        # Clear existing parts
+        self.video_parts.clear()
+        
+        # Get starting part number
+        starting_part = self.starting_part_var.get()
+        
+        # Add new parts - always use part numbers now
+        for i, video_path in enumerate(video_paths):
+            actual_part_number = starting_part + i
+            display_name = f"{original_title} (Part {actual_part_number})"
+            
+            self.video_parts.append({
+                'path': video_path,
+                'display_name': display_name,
+                'part_number': actual_part_number
+            })
+        
+        # Update dropdown values
+        dropdown_values = ["Latest"]
+        if len(self.video_parts) > 1:
+            # Multiple parts - add each part
+            dropdown_values.extend([part['display_name'] for part in self.video_parts])
+        elif len(self.video_parts) == 1:
+            # Single video - add it as an option
+            dropdown_values.append(self.video_parts[0]['display_name'])
+        
+        # Update the combobox
+        self.root.after(0, lambda: self.part_selector.configure(values=dropdown_values))
+        self.root.after(0, lambda: self.part_selector_var.set("Latest"))
+    
+    def show_batch_success_message(self, video_paths):
+        """Show success message for multiple videos created"""
+        video_list = "\n".join([f"• {os.path.basename(path)}" for path in video_paths])
+        messagebox.showinfo("Batch Videos Created", 
+                          f"Successfully created {len(video_paths)} videos:\n\n{video_list}\n\n"
+                          f"Use the 'Part' dropdown to select which video to play.")
+        self.status_label.config(text=f"✅ Created {len(video_paths)} batch videos successfully!")
+
     def process_video(self):
         try:
             clips = []
@@ -1151,10 +1660,23 @@ class PostcardVideoCreator:
             self.root.after(0, lambda: self.status_label.config(text="Writing video file..."))
             self.root.after(0, lambda: self.progress_var.set(90))
             
-            # Generate output filename
+            # Generate output filename using Line 1 text from start screen
+            line1_text = self.start_line1_var.get()
+            # Sanitize filename by removing invalid characters
+            safe_filename = "".join(c for c in line1_text if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_filename = safe_filename.replace(' ', '_')
+            
+            if not safe_filename:  # Fallback if no valid characters
+                safe_filename = "postcard_video"
+            
+            # Add timestamp for uniqueness and include dimensions
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_filename = f"postcard_video_{timestamp}.mp4"
+            dimensions = f"{self.video_width}x{self.video_height}"
+            part_number = self.starting_part_var.get()
+            output_filename = f"{safe_filename}_Part{part_number}_{timestamp}_{dimensions}.mp4"
             output_path = os.path.join(self.output_path, output_filename)
+            
+            logging.info(f"DEBUG: Generated filename: {output_filename} from Line1: '{line1_text}'")
             
             # Use OpenCV to create video instead of MoviePy (more reliable)
             self.root.after(0, lambda: self.status_label.config(text="Creating video with OpenCV..."))
@@ -1171,8 +1693,15 @@ class PostcardVideoCreator:
             # Handle background music
             music_path = None
             if self.music_var.get() != "None":
-                music_filename_wav = self.music_var.get().replace(' ', '_').lower() + '.wav'
-                music_filename_mp3 = self.music_var.get().replace(' ', '_').lower() + '.mp3'
+                # Handle random music selection
+                if self.music_var.get() == "Random":
+                    selected_music = self._get_random_music()
+                    logging.info(f"DEBUG: Random music selected: {selected_music}")
+                else:
+                    selected_music = self.music_var.get()
+                
+                music_filename_wav = selected_music.replace(' ', '_').lower() + '.wav'
+                music_filename_mp3 = selected_music.replace(' ', '_').lower() + '.mp3'
                 music_path_wav = os.path.join('music', music_filename_wav)
                 music_path_mp3 = os.path.join('music', music_filename_mp3)
                 
@@ -1286,6 +1815,10 @@ class PostcardVideoCreator:
             # Store the latest video path and enable play button
             self.latest_video_path = output_path
             self.root.after(0, lambda: self.play_button.config(state='normal'))
+            
+            # Update video parts list for single video
+            original_title = self.start_line1_var.get()
+            self.update_video_parts_list([output_path], original_title, 1)
             
             # Show success message
             self.root.after(0, lambda: self.show_success_message(output_path, actual_minutes, actual_seconds))
@@ -2251,10 +2784,22 @@ class PostcardVideoCreator:
             self.status_label.config(text="Test failed")
             messagebox.showerror("Test Failed", f"Test video creation failed:\n{str(e)}")
     
-    def play_latest_video(self):
-        """Play the most recently created video"""
-        if not self.latest_video_path or not os.path.exists(self.latest_video_path):
-            messagebox.showerror("Error", "No video has been created yet or the video file no longer exists.")
+    def play_selected_video(self):
+        """Play the selected video part"""
+        selected_part = self.part_selector_var.get()
+        
+        if selected_part == "Latest":
+            video_to_play = self.latest_video_path
+        else:
+            # Find the video path for the selected part
+            video_to_play = None
+            for video_info in self.video_parts:
+                if video_info['display_name'] == selected_part:
+                    video_to_play = video_info['path']
+                    break
+        
+        if not video_to_play or not os.path.exists(video_to_play):
+            messagebox.showerror("Error", "Selected video file does not exist.")
             return
         
         try:
@@ -2263,18 +2808,23 @@ class PostcardVideoCreator:
             
             system = platform.system()
             if system == "Windows":
-                os.startfile(self.latest_video_path)
+                os.startfile(video_to_play)
             elif system == "Darwin":  # macOS
-                subprocess.run(["open", self.latest_video_path])
+                subprocess.run(["open", video_to_play])
             else:  # Linux
-                subprocess.run(["xdg-open", self.latest_video_path])
+                subprocess.run(["xdg-open", video_to_play])
             
-            self.status_label.config(text=f"🎬 Playing video: {os.path.basename(self.latest_video_path)}")
+            self.status_label.config(text=f"🎬 Playing video: {os.path.basename(video_to_play)}")
             
         except Exception as e:
             error_msg = f"Failed to play video: {str(e)}"
             self.status_label.config(text=f"❌ {error_msg}")
             messagebox.showerror("Error", error_msg)
+    
+    def play_latest_video(self):
+        """Play the most recently created video (legacy method)"""
+        self.part_selector_var.set("Latest")
+        self.play_selected_video()
     
     def save_defaults(self):
         """Save current settings as defaults"""
@@ -2341,7 +2891,8 @@ class PostcardVideoCreator:
                 "effect": self.effect_var.get(),
                 "music": self.music_var.get(),
                 "music_volume": self.music_volume_var.get(),
-                "background_color": self.background_color_var.get()
+                "background_color": self.background_color_var.get(),
+                "starting_part_number": self.starting_part_var.get()
             }
             
             with open('defaults.json', 'w') as f:
@@ -3170,6 +3721,7 @@ class PostcardVideoCreator:
                 "music": self.music_var.get(),
                 "music_volume": self.music_volume_var.get(),
                 "background_color": self.background_color_var.get(),
+                "starting_part_number": self.starting_part_var.get(),
                 "ending_line1": self.ending_line1_var.get(),
                 "ending_line2": self.ending_line2_var.get(),
                 "ending_line3": self.ending_line3_var.get(),
@@ -3340,7 +3892,8 @@ class PostcardVideoCreator:
                 "effect": self.effect_var.get(),
                 "music": self.music_var.get(),
                 "music_volume": self.music_volume_var.get(),
-                "background_color": self.background_color_var.get()
+                "background_color": self.background_color_var.get(),
+                "starting_part_number": self.starting_part_var.get()
             }
             
             with open('defaults.json', 'w') as f:
@@ -3397,9 +3950,9 @@ class PostcardVideoCreator:
                 self.ending_line1_size_var.set(defaults.get("ending_line1_size", 1.5))
                 self.ending_line2_size_var.set(defaults.get("ending_line2_size", 1.5))
                 self.ending_line3_size_var.set(defaults.get("ending_line3_size", 1.5))
-                self.ending_line1_color_var.set(defaults.get("ending_line1_color", "white"))
-                self.ending_line2_color_var.set(defaults.get("ending_line2_color", "white"))
-                self.ending_line3_color_var.set(defaults.get("ending_line3_color", "white"))
+                self.ending_line1_color_var.set(defaults.get("ending_line1_color", "black"))
+                self.ending_line2_color_var.set(defaults.get("ending_line2_color", "black"))
+                self.ending_line3_color_var.set(defaults.get("ending_line3_color", "black"))
                 self.ending_line1_font_var.set(defaults.get("ending_line1_font", "Arial"))
                 self.ending_line2_font_var.set(defaults.get("ending_line2_font", "Arial"))
                 self.ending_line3_font_var.set(defaults.get("ending_line3_font", "Arial"))
@@ -3423,9 +3976,10 @@ class PostcardVideoCreator:
                 self.default_duration_var.set(defaults.get("default_duration", 4))
                 self.transition_duration_var.set(defaults.get("transition_duration", 1))
                 self.effect_var.set(defaults.get("effect", "fade"))
-                self.music_var.set(defaults.get("music", "Vintage Memories"))
+                self.music_var.set(defaults.get("music", "Random"))
                 self.music_volume_var.set(defaults.get("music_volume", 0.3))
-                self.background_color_var.set(defaults.get("background_color", "white"))
+                self.background_color_var.set(defaults.get("background_color", "light_gray"))
+                self.starting_part_var.set(defaults.get("starting_part_number", 1))
                 
         except Exception as e:
             print(f"Failed to load defaults: {e}")

@@ -52,5 +52,6 @@
   "effect": "fade",
   "music": "Vintage Memories",
   "music_volume": 0.3,
-  "background_color": "gray"
+  "background_color": "gray",
+  "starting_part_number": 1
 }
