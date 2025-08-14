@@ -53,6 +53,11 @@ import numpy as np
 from datetime import datetime
 import json
 import logging
+import requests
+import tempfile
+from urllib.parse import urlparse
+import zipfile
+import xml.etree.ElementTree as ET
 
 # Setup logging
 def setup_logging():
@@ -277,10 +282,12 @@ class PostcardVideoCreator:
         # Buttons for adding images
         ttk.Button(file_frame, text="Select Multiple Images", 
                   command=self.select_multiple_images).grid(row=0, column=0, padx=(0, 10))
+        ttk.Button(file_frame, text="📊 Upload Excel File", 
+                  command=self.upload_excel_file).grid(row=0, column=1, padx=(0, 10))
         ttk.Button(file_frame, text="Clear All", 
-                  command=self.clear_all_images).grid(row=0, column=1, padx=(0, 10))
+                  command=self.clear_all_images).grid(row=0, column=2, padx=(0, 10))
         ttk.Button(file_frame, text="Select Output Folder", 
-                  command=self.select_output_folder).grid(row=0, column=2)
+                  command=self.select_output_folder).grid(row=0, column=3)
         
         # Postcard list
         list_frame = ttk.Frame(file_frame)
@@ -434,6 +441,422 @@ class PostcardVideoCreator:
             self.tree.delete(item)
         self.update_create_button_state()
         self.clear_preview()
+    
+    def upload_excel_file(self):
+        """Upload and process Excel file with postcard data"""
+        excel_path = filedialog.askopenfilename(
+            title="Select Excel File with Postcard Data",
+            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+        )
+        
+        if not excel_path:
+            return
+        
+        self.status_label.config(text="Processing Excel file...")
+        self.root.update()
+        
+        try:
+            # Process Excel file in a separate thread to avoid UI blocking
+            import threading
+            thread = threading.Thread(target=self._process_excel_file, args=(excel_path,))
+            thread.daemon = True
+            thread.start()
+            
+        except Exception as e:
+            logging.error(f"Error starting Excel processing: {e}")
+            messagebox.showerror("Error", f"Failed to process Excel file:\n{str(e)}")
+            self.status_label.config(text="Ready")
+    
+    def _process_excel_file(self, excel_path):
+        """Process Excel file in background thread"""
+        try:
+            logging.info(f"Processing Excel file: {excel_path}")
+            
+            # Extract data from Excel file
+            postcards_data = self._extract_excel_data(excel_path)
+            
+            if not postcards_data:
+                self.root.after(0, lambda: messagebox.showwarning("Warning", "No postcard data found in Excel file"))
+                self.root.after(0, lambda: self.status_label.config(text="Ready"))
+                return
+            
+            # Clear existing images
+            self.root.after(0, self.clear_all_images)
+            
+            # Download and process images for each postcard
+            total_postcards = len(postcards_data)
+            processed = 0
+            
+            for i, postcard_data in enumerate(postcards_data):
+                try:
+                    logging.debug(f"Processing postcard {i+1}/{total_postcards}: {postcard_data.get('title', 'Unknown')}")
+                    
+                    # Update progress
+                    progress = (i / total_postcards) * 100
+                    self.root.after(0, lambda p=progress: self.progress_var.set(p))
+                    self.root.after(0, lambda i=i, t=total_postcards: self.status_label.config(text=f"Processing postcard {i+1}/{t}..."))
+                    
+                    # Download images for this postcard
+                    front_path, back_path = self._download_postcard_images(postcard_data)
+                    
+                    if front_path and back_path:
+                        # Add to postcard list
+                        self.root.after(0, lambda f=front_path, b=back_path, t=postcard_data.get('title', 'Unknown'): 
+                                      self._add_postcard_to_list(f, b, t))
+                        processed += 1
+                    else:
+                        logging.warning(f"Failed to download images for postcard: {postcard_data.get('title', 'Unknown')}")
+                
+                except Exception as e:
+                    logging.error(f"Error processing postcard {i+1}: {e}")
+                    continue
+            
+            # Complete
+            self.root.after(0, lambda: self.progress_var.set(100))
+            self.root.after(0, lambda p=processed, t=total_postcards: 
+                          self.status_label.config(text=f"✅ Processed {p}/{t} postcards successfully"))
+            
+            if processed > 0:
+                self.root.after(0, self.update_create_button_state)
+                self.root.after(0, lambda: messagebox.showinfo("Success", 
+                                f"Successfully processed {processed}/{total_postcards} postcards.\n\nReady to create video!"))
+            else:
+                self.root.after(0, lambda: messagebox.showerror("Error", 
+                                "No postcards could be processed. Please check the Excel file format and image URLs."))
+        
+        except Exception as e:
+            logging.error(f"Error processing Excel file: {e}")
+            self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to process Excel file:\n{str(e)}"))
+            self.root.after(0, lambda: self.status_label.config(text="Ready"))
+    
+    def _extract_excel_data(self, excel_path):
+        """Extract postcard data from Excel file"""
+        postcards_data = []
+        
+        try:
+            # Read Excel file as ZIP and extract strings
+            with zipfile.ZipFile(excel_path, 'r') as zip_file:
+                # Get shared strings
+                shared_strings = []
+                if 'xl/sharedStrings.xml' in zip_file.namelist():
+                    with zip_file.open('xl/sharedStrings.xml') as f:
+                        content = f.read().decode('utf-8')
+                        root = ET.fromstring(content)
+                        for si in root.findall('.//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t'):
+                            if si.text:
+                                shared_strings.append(si.text)
+                
+                # Find image URLs (column L contains URLs)
+                worksheet_files = [f for f in zip_file.namelist() if f.startswith('xl/worksheets/') and f.endswith('.xml')]
+                
+                for ws_file in worksheet_files:
+                    with zip_file.open(ws_file) as f:
+                        content = f.read().decode('utf-8')
+                        root = ET.fromstring(content)
+                        
+                        # Extract cells and their values
+                        rows_data = {}
+                        for row in root.findall('.//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}row'):
+                            row_num = int(row.get('r', 0))
+                            rows_data[row_num] = {}
+                            
+                            for cell in row.findall('.//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}c'):
+                                cell_ref = cell.get('r', '')
+                                if cell_ref:
+                                    # Extract column letter
+                                    col_letter = ''.join([c for c in cell_ref if c.isalpha()])
+                                    
+                                    # Get cell value
+                                    value_elem = cell.find('.//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}v')
+                                    if value_elem is not None and value_elem.text:
+                                        try:
+                                            # If it's a shared string reference
+                                            if cell.get('t') == 's':
+                                                string_index = int(value_elem.text)
+                                                if 0 <= string_index < len(shared_strings):
+                                                    rows_data[row_num][col_letter] = shared_strings[string_index]
+                                            else:
+                                                rows_data[row_num][col_letter] = value_elem.text
+                                        except (ValueError, IndexError):
+                                            rows_data[row_num][col_letter] = value_elem.text
+                        
+                        # Process rows and extract postcard data
+                        for row_num, row_data in rows_data.items():
+                            if row_num < 2:  # Skip header row
+                                continue
+                            
+                            # Look for image URLs in column L
+                            image_url = row_data.get('L', '')
+                            title = row_data.get('D', '') or row_data.get('E', '') or f"Postcard {row_num}"
+                            
+                            if image_url and 'http' in image_url:
+                                postcards_data.append({
+                                    'title': title,
+                                    'image_url': image_url,
+                                    'row': row_num
+                                })
+                
+            logging.info(f"Extracted {len(postcards_data)} postcards from Excel file")
+            return postcards_data
+        
+        except Exception as e:
+            logging.error(f"Error extracting Excel data: {e}")
+            raise
+    
+    def _download_postcard_images(self, postcard_data):
+        """Download front and back images for a postcard from URLs separated by | character"""
+        try:
+            image_url = postcard_data['image_url']
+            title = postcard_data['title']
+            
+            # Create safe filename
+            safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_title = safe_title[:50]  # Limit length
+            
+            logging.debug(f"Processing postcard URL: {image_url}")
+            
+            # Create temporary directory for downloaded images
+            temp_dir = tempfile.mkdtemp(prefix="postcards_")
+            
+            # Check if this is the pipe-separated format: front_url|back_url
+            if '|' in image_url:
+                front_path, back_path = self._download_pipe_separated_urls(image_url, safe_title, temp_dir)
+            else:
+                # Fallback to legacy methods for compatibility
+                if self._is_composite_image_url(image_url):
+                    # Single URL containing both front and back images
+                    front_path, back_path = self._download_and_split_composite_image(image_url, safe_title, temp_dir)
+                else:
+                    # Try to derive front and back URLs from the base URL
+                    front_path, back_path = self._download_separate_front_back_images(image_url, safe_title, temp_dir)
+            
+            if front_path and back_path and os.path.exists(front_path) and os.path.exists(back_path):
+                logging.debug(f"Successfully downloaded front and back images for: {title}")
+                return front_path, back_path
+            else:
+                logging.warning(f"Failed to download both images for: {title}")
+                return None, None
+        
+        except Exception as e:
+            logging.error(f"Error downloading images for {postcard_data.get('title', 'Unknown')}: {e}")
+            return None, None
+    
+    def _download_pipe_separated_urls(self, image_url, safe_title, temp_dir):
+        """Download front and back images from pipe-separated URLs"""
+        try:
+            # Split the URLs by pipe character
+            urls = image_url.split('|')
+            
+            if len(urls) != 2:
+                logging.warning(f"Expected 2 URLs separated by |, got {len(urls)}: {image_url}")
+                return None, None
+            
+            front_url = urls[0].strip()
+            back_url = urls[1].strip()
+            
+            logging.debug(f"Front URL: {front_url}")
+            logging.debug(f"Back URL: {back_url}")
+            
+            # Parse URLs to get file extensions
+            front_parsed = urlparse(front_url)
+            back_parsed = urlparse(back_url)
+            front_ext = os.path.splitext(front_parsed.path)[1] or '.jpg'
+            back_ext = os.path.splitext(back_parsed.path)[1] or '.jpg'
+            
+            # Create file paths
+            front_path = os.path.join(temp_dir, f"{safe_title}_front{front_ext}")
+            back_path = os.path.join(temp_dir, f"{safe_title}_back{back_ext}")
+            
+            # Download front image
+            logging.debug(f"Downloading front image from: {front_url}")
+            front_response = requests.get(front_url, timeout=30)
+            front_response.raise_for_status()
+            
+            with open(front_path, 'wb') as f:
+                f.write(front_response.content)
+            
+            # Download back image
+            logging.debug(f"Downloading back image from: {back_url}")
+            back_response = requests.get(back_url, timeout=30)
+            back_response.raise_for_status()
+            
+            with open(back_path, 'wb') as f:
+                f.write(back_response.content)
+            
+            logging.debug(f"Successfully downloaded both images via pipe-separated URLs for: {safe_title}")
+            return front_path, back_path
+            
+        except Exception as e:
+            logging.error(f"Error downloading pipe-separated URLs: {e}")
+            return None, None
+    
+    def _is_composite_image_url(self, url):
+        """Determine if this URL points to a composite image with front and back"""
+        # Check for indicators that this is a single composite image
+        url_lower = url.lower()
+        composite_indicators = ['composite', 'both', 'frontback', 'pair', 'combined']
+        return any(indicator in url_lower for indicator in composite_indicators)
+    
+    def _download_and_split_composite_image(self, image_url, safe_title, temp_dir):
+        """Download a composite image and split it into front and back"""
+        try:
+            # Download the composite image
+            response = requests.get(image_url, timeout=30)
+            response.raise_for_status()
+            
+            # Parse URL to get file extension
+            parsed_url = urlparse(image_url)
+            file_ext = os.path.splitext(parsed_url.path)[1] or '.jpg'
+            
+            # Save the composite image temporarily
+            composite_path = os.path.join(temp_dir, f"{safe_title}_composite{file_ext}")
+            with open(composite_path, 'wb') as f:
+                f.write(response.content)
+            
+            # Load and split the image
+            from PIL import Image
+            img = Image.open(composite_path)
+            width, height = img.size
+            
+            # Assume the image is arranged horizontally (front | back) or vertically (front / back)
+            if width > height:
+                # Horizontal layout - split vertically down the middle
+                front_img = img.crop((0, 0, width // 2, height))
+                back_img = img.crop((width // 2, 0, width, height))
+            else:
+                # Vertical layout - split horizontally across the middle
+                front_img = img.crop((0, 0, width, height // 2))
+                back_img = img.crop((0, height // 2, width, height))
+            
+            # Save split images
+            front_path = os.path.join(temp_dir, f"{safe_title}_front{file_ext}")
+            back_path = os.path.join(temp_dir, f"{safe_title}_back{file_ext}")
+            
+            front_img.save(front_path)
+            back_img.save(back_path)
+            
+            # Clean up composite image
+            os.remove(composite_path)
+            
+            logging.debug(f"Split composite image into front and back for: {safe_title}")
+            return front_path, back_path
+            
+        except Exception as e:
+            logging.error(f"Error splitting composite image: {e}")
+            return None, None
+    
+    def _download_separate_front_back_images(self, base_url, safe_title, temp_dir):
+        """Try to download separate front and back images by modifying the URL"""
+        try:
+            # Parse URL to get file extension
+            parsed_url = urlparse(base_url)
+            file_ext = os.path.splitext(parsed_url.path)[1] or '.jpg'
+            
+            # Try different URL patterns for front and back
+            url_patterns = [
+                # Pattern 1: Replace filename with _front/_back suffix
+                (base_url.replace(file_ext, f'_front{file_ext}'), base_url.replace(file_ext, f'_back{file_ext}')),
+                # Pattern 2: Add front/back before extension
+                (base_url.replace(file_ext, f'front{file_ext}'), base_url.replace(file_ext, f'back{file_ext}')),
+                # Pattern 3: Replace 'P' with 'PF' and 'PB' (based on your sample URLs)
+                (base_url.replace('/P', '/PF'), base_url.replace('/P', '/PB')),
+                # Pattern 4: Add F and B suffix to filename
+                (base_url.replace(file_ext, f'F{file_ext}'), base_url.replace(file_ext, f'B{file_ext}')),
+            ]
+            
+            for front_url, back_url in url_patterns:
+                try:
+                    logging.debug(f"Trying URL pattern: Front={front_url}, Back={back_url}")
+                    
+                    # Download front image
+                    front_response = requests.get(front_url, timeout=30)
+                    if front_response.status_code == 200:
+                        
+                        # Download back image
+                        back_response = requests.get(back_url, timeout=30)
+                        if back_response.status_code == 200:
+                            
+                            # Save both images
+                            front_path = os.path.join(temp_dir, f"{safe_title}_front{file_ext}")
+                            back_path = os.path.join(temp_dir, f"{safe_title}_back{file_ext}")
+                            
+                            with open(front_path, 'wb') as f:
+                                f.write(front_response.content)
+                            
+                            with open(back_path, 'wb') as f:
+                                f.write(back_response.content)
+                            
+                            logging.debug(f"Successfully downloaded separate images using pattern: {front_url}")
+                            return front_path, back_path
+                            
+                except requests.exceptions.RequestException:
+                    continue  # Try next pattern
+            
+            # If no patterns worked, try downloading the base URL and using it for both
+            logging.warning(f"No separate front/back URLs found, using base URL for both: {base_url}")
+            return self._download_single_image_as_both(base_url, safe_title, temp_dir)
+            
+        except Exception as e:
+            logging.error(f"Error downloading separate images: {e}")
+            return None, None
+    
+    def _download_single_image_as_both(self, image_url, safe_title, temp_dir):
+        """Download single image and use it for both front and back as fallback"""
+        try:
+            response = requests.get(image_url, timeout=30)
+            response.raise_for_status()
+            
+            # Parse URL to get file extension
+            parsed_url = urlparse(image_url)
+            file_ext = os.path.splitext(parsed_url.path)[1] or '.jpg'
+            
+            front_path = os.path.join(temp_dir, f"{safe_title}_front{file_ext}")
+            back_path = os.path.join(temp_dir, f"{safe_title}_back{file_ext}")
+            
+            # Save the same image as both front and back
+            with open(front_path, 'wb') as f:
+                f.write(response.content)
+            
+            import shutil
+            shutil.copy2(front_path, back_path)
+            
+            logging.debug(f"Using single image for both front and back: {safe_title}")
+            return front_path, back_path
+            
+        except Exception as e:
+            logging.error(f"Error downloading single image: {e}")
+            return None, None
+    
+    def _add_postcard_to_list(self, front_path, back_path, title):
+        """Add postcard to the list (called from main thread)"""
+        # Add front image
+        self.postcard_images.append(front_path)
+        self.image_durations.append(self.default_duration)
+        
+        # Add back image  
+        self.postcard_images.append(back_path)
+        self.image_durations.append(self.default_duration)
+        
+        # Update tree view
+        index = len(self.postcard_images) - 2  # Front image index
+        
+        # Add front
+        self.tree.insert('', 'end', values=(
+            f"{index//2 + 1}",
+            "Front",
+            os.path.basename(front_path),
+            f"{self.default_duration}s",
+            title
+        ))
+        
+        # Add back
+        self.tree.insert('', 'end', values=(
+            f"{index//2 + 1}",
+            "Back", 
+            os.path.basename(back_path),
+            f"{self.default_duration}s",
+            title
+        ))
         
     def select_output_folder(self):
         # Start with the default directory if it exists
@@ -668,12 +1091,12 @@ class PostcardVideoCreator:
                 else:
                     logging.debug(f"No manual transition, adding front clip directly")
                     clips.append(front_clip)
-
+                
                 # Create back clip
                 print(f"DEBUG: Creating back clip for {back_path}")
                 back_clip = self.create_image_clip(back_path, back_duration)
                 print(f"DEBUG: Back clip created successfully")
-
+                
                 # Add transition between front and back
                 if self.transition_duration > 0:
                     transition = self.create_transition(front_clip, back_clip)
@@ -1430,11 +1853,13 @@ class PostcardVideoCreator:
                     ending_clip = vfx_fadeout(ending_clip, self.ending_fade_out_dur_var.get())
                 except Exception as e:
                     print(f"Warning: Failed to apply ending fade out effect: {e}")
+            
             return ending_clip
+            
         except Exception as e:
             print(f"ERROR: Failed to create ending clip: {e}")
             return None
-
+    
     
     def create_start_clip(self, duration=3, apply_fade_out=None):
         """Create a start clip with logo and text on white background"""
@@ -1687,6 +2112,7 @@ class PostcardVideoCreator:
             
             print("DEBUG: Returning start clip")
             return start_clip
+            
         except Exception as e:
             print(f"ERROR: Failed to create start clip: {e}")
             import traceback
@@ -2010,7 +2436,7 @@ class PostcardVideoCreator:
         ttk.Spinbox(fade_frame, from_=0.0, to=5.0, increment=0.1, textvariable=self.ending_fade_out_dur_var, width=6).grid(row=1, column=2, sticky=tk.W)
         
         
-
+        
         # Preview section
         preview_frame = ttk.LabelFrame(right_col, text="Live Preview", padding="10")
         preview_frame.grid(row=0, column=0, pady=(10, 8), sticky=(tk.W, tk.E))
@@ -2059,7 +2485,7 @@ class PostcardVideoCreator:
         ttk.Label(ending_extra_frame, text="Spacing (text → image):").grid(row=1, column=2, sticky=tk.W, pady=(10,0))
         ttk.Spinbox(ending_extra_frame, from_=0, to=300, increment=5, textvariable=self.ending_image_spacing_var,
                     width=8, command=self.update_ending_preview).grid(row=1, column=3, sticky=tk.W, pady=(10,0), padx=(5,15))
-
+        
         # Buttons frame
         button_frame = ttk.Frame(main_frame)
         button_frame.grid(row=3, column=0, columnspan=2, pady=(6, 4))
@@ -2203,7 +2629,7 @@ class PostcardVideoCreator:
         ttk.Label(start_extra_frame, text="Spacing (text → image):").grid(row=1, column=2, sticky=tk.W, pady=(8,0))
         ttk.Spinbox(start_extra_frame, from_=0, to=300, increment=5, textvariable=self.start_image_spacing_var, width=8,
                     command=self.update_start_preview).grid(row=1, column=3, sticky=tk.W, pady=(8,0))
-
+        
         # Preview section
         preview_frame = ttk.LabelFrame(main_frame, text="Live Preview", padding="10")
         preview_frame.grid(row=8, column=0, columnspan=6, pady=(10, 10), sticky=(tk.W, tk.E))
@@ -2415,7 +2841,7 @@ class PostcardVideoCreator:
             if line1 and not line1_hidden:
                 color1 = color_map.get(line1_color, "#000000")
                 y1 = int(text_start_y)
-                self.start_preview_canvas.create_text(canvas_width//2, y1, text=line1,
+                self.start_preview_canvas.create_text(canvas_width//2, y1, text=line1, 
                                                     fill=color1, font=(line1_font, font1_size, 'bold'), anchor=tk.N)
             
             # Line 2
@@ -2425,7 +2851,7 @@ class PostcardVideoCreator:
                     y2 = int(text_start_y)
                 else:
                     y2 = int(text_start_y + adjusted_spacing)
-                self.start_preview_canvas.create_text(canvas_width//2, y2, text=line2,
+                self.start_preview_canvas.create_text(canvas_width//2, y2, text=line2, 
                                                     fill=color2, font=(line2_font, font2_size, 'bold'), anchor=tk.N)
 
             # Render start extra image in preview
