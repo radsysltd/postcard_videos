@@ -5,24 +5,92 @@ import threading
 import time
 from PIL import Image, ImageTk
 import cv2
-from moviepy import *
+# Import core MoviePy modules first
 try:
-    # Preferred: import specific fx modules (works across common versions)
-    from moviepy.video.fx.fadein import fadein as vfx_fadein
-    from moviepy.video.fx.fadeout import fadeout as vfx_fadeout
+    # Try newer MoviePy 2.x import structure
+    from moviepy import VideoClip, concatenate_videoclips, ImageClip, AudioFileClip
+    print("DEBUG: Core MoviePy imports successful (MoviePy 2.x)")
 except Exception:
     try:
-        # Alternate aggregator path
-        from moviepy.video.fx.all import fadein as vfx_fadein, fadeout as vfx_fadeout
+        # Fallback to older MoviePy import structure
+        from moviepy.editor import VideoClip, concatenate_videoclips, ImageClip, AudioFileClip
+        print("DEBUG: Core MoviePy imports successful (older MoviePy)")
+    except Exception as e:
+        print(f"ERROR: MoviePy not properly installed: {e}")
+        VideoClip = None
+        concatenate_videoclips = None
+        ImageClip = None
+        AudioFileClip = None
+
+# Import fade effects with fallbacks
+try:
+    # MoviePy 2.x structure - using proper method calls
+    import moviepy
+    def vfx_fadein(clip, duration):
+        return clip.with_effects([moviepy.vfx.FadeIn(duration)])
+    def vfx_fadeout(clip, duration):
+        return clip.with_effects([moviepy.vfx.FadeOut(duration)])
+    print("DEBUG: MoviePy 2.x fade effects imported successfully")
+except Exception:
+    try:
+        # Older MoviePy structure
+        from moviepy.video.fx.fadein import fadein as vfx_fadein
+        from moviepy.video.fx.fadeout import fadeout as vfx_fadeout
+        print("DEBUG: Older MoviePy fade effects imported successfully")
     except Exception:
-        # Last-resort no-op functions to avoid import crashes
-        def vfx_fadein(clip, duration):
-            return clip
-        def vfx_fadeout(clip, duration):
-            return clip
+        try:
+            # Alternate aggregator path
+            from moviepy.video.fx.all import fadein as vfx_fadein, fadeout as vfx_fadeout
+            print("DEBUG: MoviePy fade effects imported via .all module")
+        except Exception as e:
+            print(f"DEBUG: Fade effects not available, using no-op functions: {e}")
+            # Last-resort no-op functions to avoid import crashes
+            def vfx_fadein(clip, duration):
+                return clip
+            def vfx_fadeout(clip, duration):
+                return clip
 import numpy as np
 from datetime import datetime
 import json
+import logging
+
+# Setup logging
+def setup_logging():
+    log_dir = "logs"
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    log_file = os.path.join(log_dir, f"debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+    
+    # Configure logging to both file and console
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()  # This keeps console output
+        ]
+    )
+    
+    logging.info(f"Logging started - Log file: {log_file}")
+    return log_file
+
+# Setup logging when module is imported
+current_log_file = setup_logging()
+
+def get_latest_log_file():
+    """Get the path to the most recent log file"""
+    log_dir = "logs"
+    if not os.path.exists(log_dir):
+        return None
+    
+    log_files = [f for f in os.listdir(log_dir) if f.startswith("debug_") and f.endswith(".log")]
+    if not log_files:
+        return None
+    
+    # Sort by filename (which contains timestamp) to get latest
+    latest_log = sorted(log_files)[-1]
+    return os.path.join(log_dir, latest_log)
 
 class PostcardVideoCreator:
     def __init__(self, root):
@@ -69,6 +137,12 @@ class PostcardVideoCreator:
         self.ending_fade_out_var = tk.BooleanVar(value=False)
         self.ending_fade_in_dur_var = tk.DoubleVar(value=0.5)
         self.ending_fade_out_dur_var = tk.DoubleVar(value=0.5)
+
+        # Start extra image options (mirror ending)
+        self.start_image_enabled_var = tk.BooleanVar(value=False)
+        self.start_image_path_var = tk.StringVar(value="")
+        self.start_image_height_var = tk.IntVar(value=200)
+        self.start_image_spacing_var = tk.IntVar(value=20)
         
         # Ending text variables
         self.ending_line1_var = tk.StringVar(value="Lincoln Rare Books & Collectables")
@@ -552,7 +626,15 @@ class PostcardVideoCreator:
             # Add start clip with logo and text
             self.root.after(0, lambda: self.status_label.config(text="Creating start clip..."))
             start_duration = self.start_duration_var.get()
-            start_clip = self.create_start_clip(duration=start_duration)
+            # Don't apply fade-out to start clip if we're creating a manual transition
+            # Apply fade-out only if: fade-out enabled AND (no postcards OR manual transition disabled)
+            will_create_manual_transition = len(self.postcard_images) > 0 and self.start_fade_out_var.get()
+            apply_fade_out = self.start_fade_out_var.get() and not will_create_manual_transition
+            logging.debug(f"Fade logic - postcards: {len(self.postcard_images)}, fade_out_enabled: {self.start_fade_out_var.get()}")
+            logging.debug(f"will_create_manual_transition: {will_create_manual_transition}, apply_fade_out: {apply_fade_out}")
+            start_clip = self.create_start_clip(duration=start_duration, apply_fade_out=apply_fade_out)
+            if start_clip is None:
+                raise Exception("Failed to create start clip")
             clips.append(start_clip)
             
             # Calculate estimated time (rough estimate: 2 seconds per image)
@@ -573,17 +655,31 @@ class PostcardVideoCreator:
                 back_duration = self.image_durations[i + 1]
                 
                 # Create front clip
+                print(f"DEBUG: Creating front clip for {front_path}")
                 front_clip = self.create_image_clip(front_path, front_duration)
-                
+                print(f"DEBUG: Front clip created successfully")
+
+                # If requested, fade the start screen into the first front clip
+                if i == 0 and self.start_fade_out_var.get():
+                    logging.debug(f"Creating manual fade transition from start to first postcard")
+                    start_to_front = self.create_fade_transition(start_clip, front_clip)
+                    clips.extend([start_to_front, front_clip])
+                    logging.debug(f"Manual transition created, clips now: {len(clips)}")
+                else:
+                    logging.debug(f"No manual transition, adding front clip directly")
+                    clips.append(front_clip)
+
                 # Create back clip
+                print(f"DEBUG: Creating back clip for {back_path}")
                 back_clip = self.create_image_clip(back_path, back_duration)
-                
+                print(f"DEBUG: Back clip created successfully")
+
                 # Add transition between front and back
                 if self.transition_duration > 0:
                     transition = self.create_transition(front_clip, back_clip)
-                    clips.extend([front_clip, transition, back_clip])
+                    clips.extend([transition, back_clip])
                 else:
-                    clips.extend([front_clip, back_clip])
+                    clips.append(back_clip)
                 
                 # Add transition to next postcard (except for last one)
                 if i < total_images - 2:
@@ -595,13 +691,19 @@ class PostcardVideoCreator:
             # Add ending clip
             self.root.after(0, lambda: self.status_label.config(text="Adding ending clip..."))
             ending_duration = self.ending_duration_var.get()
+            print(f"DEBUG: Creating ending clip...")
             ending_clip = self.create_ending_clip(duration=ending_duration)
+            if ending_clip is None:
+                raise Exception("Failed to create ending clip")
+            print(f"DEBUG: Ending clip created successfully")
             clips.append(ending_clip)
             
             # Concatenate all clips
             self.root.after(0, lambda: self.status_label.config(text="Concatenating clips..."))
             self.root.after(0, lambda: self.progress_var.set(85))
+            print(f"DEBUG: About to concatenate {len(clips)} clips")
             final_video = concatenate_videoclips(clips, method="compose")
+            print(f"DEBUG: Clips concatenated successfully")
             
             # Update progress for video writing
             self.root.after(0, lambda: self.status_label.config(text="Writing video file..."))
@@ -654,6 +756,27 @@ class PostcardVideoCreator:
                     t = i / fps
                     if t <= duration:
                         frame = clip.get_frame(t)
+                        # Apply manual fades for start and ending clips if enabled
+                        try:
+                            if clip is start_clip:
+                                # Start clip fades are handled by MoviePy effects in create_start_clip method
+                                # Don't apply manual fades here to avoid double fade effects
+                                logging.debug(f"Start clip frame at t={t:.2f} (fades handled by MoviePy)")
+                            elif clip is ending_clip:
+                                if self.ending_fade_in_var.get():
+                                    fin = max(0.0, min(1.0, t / max(0.001, self.ending_fade_in_dur_var.get())))
+                                else:
+                                    fin = 1.0
+                                if self.ending_fade_out_var.get():
+                                    fout = max(0.0, min(1.0, (duration - t) / max(0.001, self.ending_fade_out_dur_var.get())))
+                                else:
+                                    fout = 1.0
+                                alpha = min(fin, fout)
+                                if alpha < 1.0:
+                                    white = np.ones_like(frame, dtype=np.uint8) * 255
+                                    frame = (frame.astype(np.float32) * alpha + white.astype(np.float32) * (1.0 - alpha)).astype(np.uint8)
+                        except Exception as _:
+                            pass
                         # Convert RGB to BGR for OpenCV
                         frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                         out.write(frame_bgr)
@@ -726,7 +849,11 @@ class PostcardVideoCreator:
             self.root.after(0, lambda: self.show_success_message(output_path, actual_minutes, actual_seconds))
             
         except Exception as e:
+            import traceback
             error_msg = str(e)
+            full_traceback = traceback.format_exc()
+            print(f"ERROR: Video creation failed: {error_msg}")
+            print(f"FULL TRACEBACK: {full_traceback}")
             self.root.after(0, lambda: self.show_error_message(error_msg))
         finally:
             self.root.after(0, self.finish_processing)
@@ -815,25 +942,41 @@ class PostcardVideoCreator:
     
     def create_fade_transition(self, clip1, clip2):
         """Create a fade transition between two clips"""
-        # Create a custom clip that blends between the two
+        # Create a custom clip that shows the first clip, then fades to the second
+        logging.debug(f"Creating fade transition: clip1 duration={clip1.duration}, transition duration={self.transition_duration}")
+        
         def make_frame(t):
-            if t <= self.transition_duration:
-                # Get frames from both clips
-                frame1 = clip1.get_frame(min(t, clip1.duration))
-                frame2 = clip2.get_frame(min(t, clip2.duration))
+            if t < clip1.duration - self.transition_duration:
+                # Show first clip normally (before transition starts)
+                return clip1.get_frame(t)
+            elif t < clip1.duration:
+                # Transition period: fade from clip1 to clip2
+                transition_progress = (t - (clip1.duration - self.transition_duration)) / self.transition_duration
+                frame1 = clip1.get_frame(t)
+                frame2 = clip2.get_frame(0)  # Start of second clip
                 
-                # Calculate fade factor
-                fade_factor = t / self.transition_duration
+                # Ensure frames are the right type and shape
+                frame1 = np.array(frame1, dtype=np.float32)
+                frame2 = np.array(frame2, dtype=np.float32)
                 
-                # Blend frames
-                blended_frame = frame1 * (1 - fade_factor) + frame2 * fade_factor
+                # Ensure both frames have the same shape
+                if frame1.shape != frame2.shape:
+                    logging.warning(f"Frame shape mismatch: {frame1.shape} vs {frame2.shape}")
+                    # Resize frame2 to match frame1
+                    import cv2
+                    frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))
+                
+                # Blend frames with proper clamping
+                blended_frame = frame1 * (1 - transition_progress) + frame2 * transition_progress
+                blended_frame = np.clip(blended_frame, 0, 255)
                 return blended_frame.astype('uint8')
             else:
-                return clip2.get_frame(min(t - self.transition_duration, clip2.duration))
+                # After transition: show second clip
+                return clip2.get_frame(t - clip1.duration)
         
-        # Create a custom clip with the transition
-        from moviepy import VideoClip
-        transition_clip = VideoClip(make_frame, duration=clip1.duration + self.transition_duration)
+        # Transition clip duration is just the first clip duration (transition happens within it)
+        transition_clip = VideoClip(make_frame, duration=clip1.duration)
+        logging.debug(f"Fade transition created with duration={transition_clip.duration}")
         return transition_clip
     
     def create_slide_transition(self, clip1, clip2, direction="left"):
@@ -875,7 +1018,7 @@ class PostcardVideoCreator:
             else:
                 return clip2.get_frame(min(t - self.transition_duration, clip2.duration))
         
-        from moviepy import VideoClip
+
         transition_clip = VideoClip(make_frame, duration=clip1.duration + self.transition_duration)
         return transition_clip
     
@@ -914,7 +1057,7 @@ class PostcardVideoCreator:
             else:
                 return clip2.get_frame(min(t - self.transition_duration, clip2.duration))
         
-        from moviepy import VideoClip
+
         transition_clip = VideoClip(make_frame, duration=clip1.duration + self.transition_duration)
         return transition_clip
     
@@ -943,7 +1086,7 @@ class PostcardVideoCreator:
             else:
                 return clip2.get_frame(min(t - self.transition_duration, clip2.duration))
         
-        from moviepy import VideoClip
+
         transition_clip = VideoClip(make_frame, duration=clip1.duration + self.transition_duration)
         return transition_clip
     
@@ -967,12 +1110,26 @@ class PostcardVideoCreator:
                 
                 # For now, just do a fade (zoom requires more complex image processing)
                 fade_factor = zoom_progress
+                
+                # Ensure frames are the right type and shape
+                frame1 = np.array(frame1, dtype=np.float32)
+                frame2 = np.array(frame2, dtype=np.float32)
+                
+                # Ensure both frames have the same shape
+                if frame1.shape != frame2.shape:
+                    logging.warning(f"Frame shape mismatch in zoom transition: {frame1.shape} vs {frame2.shape}")
+                    # Resize frame2 to match frame1
+                    import cv2
+                    frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))
+                
+                # Blend frames with proper clamping
                 blended_frame = frame1 * (1 - fade_factor) + frame2 * fade_factor
+                blended_frame = np.clip(blended_frame, 0, 255)
                 return blended_frame.astype('uint8')
             else:
                 return clip2.get_frame(min(t - self.transition_duration, clip2.duration))
         
-        from moviepy import VideoClip
+
         transition_clip = VideoClip(make_frame, duration=clip1.duration + self.transition_duration)
         return transition_clip
     
@@ -1078,10 +1235,38 @@ class PostcardVideoCreator:
             
             # Total content height = logo + spacing + text
             total_content_height = logo_height + logo_text_spacing + total_text_height
+
+            # Extra image contribution (video sizing unscaled)
+            ending_extra_image_enabled = self.ending_image_enabled_var.get()
+            ending_extra_image_path = self.ending_image_path_var.get()
+            ending_extra_image_spacing = self.ending_image_spacing_var.get()
+            ending_extra_image_height = self.ending_image_height_var.get()
+            include_ending_extra = bool(ending_extra_image_enabled and ending_extra_image_path and os.path.exists(ending_extra_image_path))
+            if include_ending_extra:
+                total_content_height += ending_extra_image_spacing + ending_extra_image_height
             
             # Calculate starting Y position to center everything
             available_height = self.video_height - 100  # Leave 50px margins top and bottom
             start_y = (available_height - total_content_height) // 2 + 50  # Center and add top margin
+            
+            # If content is too tall, scale down or adjust positioning
+            if total_content_height > available_height:
+                print(f"WARNING: Content too tall ({total_content_height}px > {available_height}px), adjusting...")
+                # Use smaller margins and start from top
+                available_height = self.video_height - 40  # Smaller margins
+                start_y = 20  # Start near top
+                
+                # If still too tall, we'll need to scale down the logo
+                if total_content_height > available_height:
+                    scale_factor = available_height / total_content_height
+                    logo_size_video = int(logo_size_video * scale_factor)
+                    logo_height = logo_size_video
+                    # Recalculate total content height with smaller logo
+                    total_content_height = logo_height + logo_text_spacing + total_text_height
+                    print(f"DEBUG: Scaled logo to {logo_size_video}px, new total height: {total_content_height}px")
+            
+            # Ensure start_y is never negative
+            start_y = max(10, start_y)
             
             # Logo position
             logo_y = start_y
@@ -1101,6 +1286,11 @@ class PostcardVideoCreator:
             print(f"DEBUG: Spacing: base={base_spacing}, adjusted={adjusted_spacing}")
             
             print(f"DEBUG: Final Y positions - Line1: {text_start_y}, Line2: {text_start_y + adjusted_spacing}, Line3: {text_start_y + (adjusted_spacing * 2)}")
+            
+            # Ensure hidden variables are accessible for rendering section
+            line1_hidden = getattr(self, 'ending_line1_hidden_var', tk.BooleanVar(value=False)).get()
+            line2_hidden = getattr(self, 'ending_line2_hidden_var', tk.BooleanVar(value=False)).get()
+            line3_hidden = getattr(self, 'ending_line3_hidden_var', tk.BooleanVar(value=False)).get()
             
             # Load and display logo with calculated positioning
             logo_path = os.path.join(os.path.dirname(__file__), "images", "logo.png")
@@ -1129,14 +1319,14 @@ class PostcardVideoCreator:
                                      white_bg * (1 - alpha_channel[:, :, np.newaxis])
                             
                             # Place logo on frame with calculated position
-                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = blended.astype(np.uint8)
+                            frame[max(0,logo_y):min(self.video_height,logo_y+logo_size_video), max(0,logo_x):min(self.video_width,logo_x+logo_size_video)] = blended.astype(np.uint8)
                             
                         elif len(logo.shape) == 3 and logo.shape[2] == 3:  # RGB without alpha
                             # Place logo directly
-                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
+                            frame[max(0,logo_y):min(self.video_height,logo_y+logo_size_video), max(0,logo_x):min(self.video_width,logo_x+logo_size_video)] = logo
                         else:
                             # Grayscale or other format - place directly
-                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
+                            frame[max(0,logo_y):min(self.video_height,logo_y+logo_size_video), max(0,logo_x):min(self.video_width,logo_x+logo_size_video)] = logo
                 except Exception as e:
                     print(f"Error loading logo: {e}")
             
@@ -1195,14 +1385,14 @@ class PostcardVideoCreator:
             else:
                 print(f"DEBUG: Line 3 is empty or None")
 
-            # Extra image rendering (after last visible text line)
-            if include_extra_image:
+            # Extra image rendering for ending (after last visible text line)
+            if include_ending_extra:
                 try:
-                    pil_img = Image.open(extra_image_path)
+                    pil_img = Image.open(ending_extra_image_path)
                     w, h = pil_img.size
                     if h <= 0:
                         h = 1
-                    new_h = max(1, int(extra_image_height))
+                    new_h = max(1, int(ending_extra_image_height))
                     new_w = int(w * (new_h / h))
                     pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
                     rgb_img = np.array(pil_img.convert('RGB'))
@@ -1215,7 +1405,7 @@ class PostcardVideoCreator:
                         visible_offset += 1
                     if line3 and not line3_hidden:
                         last_y = int(text_start_y + (adjusted_spacing * max(visible_offset, 0)))
-                    extra_y = int(last_y + extra_image_spacing)
+                    extra_y = int(last_y + ending_extra_image_spacing)
                     extra_x = (self.video_width - new_w) // 2
                     frame[extra_y:extra_y + new_h, extra_x:extra_x + new_w] = rgb_img
                 except Exception as e:
@@ -1223,26 +1413,36 @@ class PostcardVideoCreator:
             
             return frame
         
-        from moviepy import VideoClip
-        ending_clip = VideoClip(make_frame, duration=duration)
-        # Apply fade effects if enabled
-        if self.ending_fade_in_var.get():
-            try:
-                ending_clip = vfx_fadein(ending_clip, self.ending_fade_in_dur_var.get())
-            except Exception as _:
-                pass
-        if self.ending_fade_out_var.get():
-            try:
-                ending_clip = vfx_fadeout(ending_clip, self.ending_fade_out_dur_var.get())
-            except Exception as _:
-                pass
-        return ending_clip
+        try:
+            ending_clip = VideoClip(make_frame, duration=duration)
+            if ending_clip is None:
+                print("ERROR: Failed to create ending clip")
+                return None
+            
+            # Apply fade effects if enabled
+            if self.ending_fade_in_var.get():
+                try:
+                    ending_clip = vfx_fadein(ending_clip, self.ending_fade_in_dur_var.get())
+                except Exception as e:
+                    print(f"Warning: Failed to apply ending fade in effect: {e}")
+            if self.ending_fade_out_var.get():
+                try:
+                    ending_clip = vfx_fadeout(ending_clip, self.ending_fade_out_dur_var.get())
+                except Exception as e:
+                    print(f"Warning: Failed to apply ending fade out effect: {e}")
+            return ending_clip
+        except Exception as e:
+            print(f"ERROR: Failed to create ending clip: {e}")
+            return None
+
     
-    def create_start_clip(self, duration=3):
+    def create_start_clip(self, duration=3, apply_fade_out=None):
         """Create a start clip with logo and text on white background"""
         def make_frame(t):
             import numpy as np
             import cv2
+            import os
+            from PIL import Image
             
             # Create white frame
             frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 255
@@ -1274,7 +1474,20 @@ class PostcardVideoCreator:
                 "orange": (255, 165, 0)   # RGB: Red=255, Green=165, Blue=0 = Orange
             }
             
-            # Font settings
+            # Font mapping for OpenCV (limited font support but with variety)
+            font_map = {
+                "Arial": cv2.FONT_HERSHEY_SIMPLEX,
+                "Times New Roman": cv2.FONT_HERSHEY_SIMPLEX,
+                "Courier New": cv2.FONT_HERSHEY_SIMPLEX,
+                "Georgia": cv2.FONT_HERSHEY_DUPLEX,  # Different font for variety
+                "Verdana": cv2.FONT_HERSHEY_SIMPLEX,
+                "Impact": cv2.FONT_HERSHEY_TRIPLEX,  # Bold font for impact
+            }
+            
+            # Get individual fonts for each line
+            font1 = font_map.get(line1_font, cv2.FONT_HERSHEY_SIMPLEX)
+            font2 = font_map.get(line2_font, cv2.FONT_HERSHEY_SIMPLEX)
+            
             font = cv2.FONT_HERSHEY_SIMPLEX
             thickness = 3
             
@@ -1303,9 +1516,37 @@ class PostcardVideoCreator:
             # Total content height = logo + spacing + text
             total_content_height = logo_height + logo_text_spacing + total_text_height
             
+            # Extra image contribution (video sizing unscaled)
+            start_extra_image_enabled = self.start_image_enabled_var.get()
+            start_extra_image_path = self.start_image_path_var.get()
+            start_extra_image_spacing = self.start_image_spacing_var.get()
+            start_extra_image_height = self.start_image_height_var.get()
+            include_start_extra = bool(start_extra_image_enabled and start_extra_image_path and os.path.exists(start_extra_image_path))
+            if include_start_extra:
+                total_content_height += start_extra_image_spacing + start_extra_image_height
+            
             # Calculate starting Y position to center everything
             available_height = self.video_height - 100  # Leave 50px margins top and bottom
             start_y = (available_height - total_content_height) // 2 + 50  # Center and add top margin
+            
+            # If content is too tall, scale down or adjust positioning
+            if total_content_height > available_height:
+                print(f"WARNING: Start content too tall ({total_content_height}px > {available_height}px), adjusting...")
+                # Use smaller margins and start from top
+                available_height = self.video_height - 40  # Smaller margins
+                start_y = 20  # Start near top
+                
+                # If still too tall, we'll need to scale down the logo
+                if total_content_height > available_height:
+                    scale_factor = available_height / total_content_height
+                    logo_size_video = int(logo_size_video * scale_factor)
+                    logo_height = logo_size_video
+                    # Recalculate total content height with smaller logo
+                    total_content_height = logo_height + logo_text_spacing + total_text_height
+                    print(f"DEBUG: Start scaled logo to {logo_size_video}px, new total height: {total_content_height}px")
+            
+            # Ensure start_y is never negative
+            start_y = max(10, start_y)
             
             # Logo position
             logo_y = start_y
@@ -1343,58 +1584,114 @@ class PostcardVideoCreator:
                                      white_bg * (1 - alpha_channel[:, :, np.newaxis])
                             
                             # Place logo on frame with calculated position
-                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = blended.astype(np.uint8)
+                            frame[max(0,logo_y):min(self.video_height,logo_y+logo_size_video), max(0,logo_x):min(self.video_width,logo_x+logo_size_video)] = blended.astype(np.uint8)
                             
                         elif len(logo.shape) == 3 and logo.shape[2] == 3:  # RGB without alpha
                             # Place logo directly
-                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
+                            frame[max(0,logo_y):min(self.video_height,logo_y+logo_size_video), max(0,logo_x):min(self.video_width,logo_x+logo_size_video)] = logo
                         else:
                             # Grayscale or other format - place directly
-                            frame[logo_y:logo_y+logo_size_video, logo_x:logo_x+logo_size_video] = logo
+                            frame[max(0,logo_y):min(self.video_height,logo_y+logo_size_video), max(0,logo_x):min(self.video_width,logo_x+logo_size_video)] = logo
                 except Exception as e:
                     print(f"Error loading logo: {e}")
             
             # Line 1
             if line1 and not line1_hidden:
+                print(f"DEBUG: Drawing Line 1 - Text: '{line1}'")
                 color1 = color_map.get(line1_color, (0, 0, 0))
                 # No fade effect - use full color immediately
                 text_color1 = color1
-                (text_width, text_height), _ = cv2.getTextSize(line1, font, line1_size, thickness)
+                (text_width, text_height), _ = cv2.getTextSize(line1, font1, line1_size, thickness)
                 x1 = (self.video_width - text_width) // 2
                 y1 = int(text_start_y)  # Convert to integer for OpenCV
-                cv2.putText(frame, line1, (x1, y1), font, line1_size, text_color1, thickness)
+                cv2.putText(frame, line1, (x1, y1), font1, line1_size, text_color1, thickness)
+                print(f"DEBUG: Ending Line 1 - Text: '{line1}', Color: {text_color1}, Pos: ({x1}, {y1})")
+            else:
+                print(f"DEBUG: Line 1 is empty or None")
             
             # Line 2
             if line2:
+                print(f"DEBUG: Drawing Line 2 - Text: '{line2}'")
                 color2 = color_map.get(line2_color, (0, 0, 0))
                 # No fade effect - use full color immediately
                 text_color2 = color2
-                (text_width, text_height), _ = cv2.getTextSize(line2, font, line2_size, thickness)
+                (text_width, text_height), _ = cv2.getTextSize(line2, font2, line2_size, thickness)
                 x2 = (self.video_width - text_width) // 2
-                if line1_hidden:
-                    # If line 1 is hidden, line 2 uses the text start position
-                    y2 = int(text_start_y)  # Convert to integer for OpenCV
+                if line1_hidden or not line1:
+                    y2 = int(text_start_y)
                 else:
-                    # If line 1 is visible, line 2 is positioned below it
-                    y2 = int(text_start_y + adjusted_spacing)  # Convert to integer for OpenCV
-                cv2.putText(frame, line2, (x2, y2), font, line2_size, text_color2, thickness)
+                    y2 = int(text_start_y + adjusted_spacing)
+                cv2.putText(frame, line2, (x2, y2), font2, line2_size, text_color2, thickness)
+                print(f"DEBUG: Start Line 2 - Text: '{line2}', Color: {text_color2}, Pos: ({x2}, {y2})")
+            else:
+                print(f"DEBUG: Line 2 is empty or None")
+
+            # Extra image rendering for start (after last visible text line)
+            if include_start_extra:
+                try:
+                    pil_img = Image.open(start_extra_image_path)
+                    w, h = pil_img.size
+                    if h <= 0:
+                        h = 1
+                    new_h = max(1, int(start_extra_image_height))
+                    new_w = int(w * (new_h / h))
+                    pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                    rgb_img = np.array(pil_img.convert('RGB'))
+                    last_y = text_start_y if (line1_hidden or not line1) else int(text_start_y + adjusted_spacing)
+                    extra_y = int(last_y + start_extra_image_spacing)
+                    extra_x = (self.video_width - new_w) // 2
+                    frame[extra_y:extra_y + new_h, extra_x:extra_x + new_w] = rgb_img
+                except Exception as e:
+                    print(f"Start video extra image error: {e}")
             
             return frame
         
-        from moviepy import VideoClip
-        start_clip = VideoClip(make_frame, duration=duration)
-        # Apply fade effects if enabled
-        if self.start_fade_in_var.get():
-            try:
-                start_clip = vfx_fadein(start_clip, self.start_fade_in_dur_var.get())
-            except Exception as _:
-                pass
-        if self.start_fade_out_var.get():
-            try:
-                start_clip = vfx_fadeout(start_clip, self.start_fade_out_dur_var.get())
-            except Exception as _:
-                pass
-        return start_clip
+
+        try:
+            print("DEBUG: Creating start clip...")
+            print(f"DEBUG: Duration: {duration}")
+            print(f"DEBUG: Video dimensions: {self.video_width}x{self.video_height}")
+            print(f"DEBUG: VideoClip available: {VideoClip is not None}")
+            
+            if VideoClip is None:
+                print("ERROR: VideoClip is None - MoviePy not properly imported")
+                return None
+            
+            start_clip = VideoClip(make_frame, duration=duration)
+            if start_clip is None:
+                print("ERROR: VideoClip returned None")
+                return None
+            
+            print("DEBUG: Start clip created successfully")
+            
+            # Apply fade effects if enabled
+            if self.start_fade_in_var.get():
+                try:
+                    start_clip = vfx_fadein(start_clip, self.start_fade_in_dur_var.get())
+                    logging.debug("Applied fade in effect to start clip")
+                except Exception as e:
+                    logging.warning(f"Failed to apply fade in effect: {e}")
+            
+            # Only apply fade-out if explicitly requested (not when manual transition will be created)
+            if apply_fade_out is None:
+                apply_fade_out = self.start_fade_out_var.get()
+            
+            if apply_fade_out:
+                try:
+                    start_clip = vfx_fadeout(start_clip, self.start_fade_out_dur_var.get())
+                    logging.debug("Applied fade out effect to start clip")
+                except Exception as e:
+                    logging.warning(f"Failed to apply fade out effect: {e}")
+            else:
+                logging.debug("Skipping fade out effect (manual transition will be used)")
+            
+            print("DEBUG: Returning start clip")
+            return start_clip
+        except Exception as e:
+            print(f"ERROR: Failed to create start clip: {e}")
+            import traceback
+            print(f"TRACEBACK: {traceback.format_exc()}")
+            return None
             
     def show_success_message(self, output_path, minutes, seconds):
         time_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
@@ -1571,6 +1868,7 @@ class PostcardVideoCreator:
         main_frame = ttk.Frame(dialog, padding="16")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         main_frame.columnconfigure(0, weight=1)
+        main_frame.columnconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
         
         # Title
@@ -1680,6 +1978,8 @@ class PostcardVideoCreator:
         ttk.Label(fade_frame, text="Out Duration (s):").grid(row=1, column=1, sticky=tk.W, padx=(10, 0))
         ttk.Spinbox(fade_frame, from_=0.0, to=5.0, increment=0.1, textvariable=self.ending_fade_out_dur_var, width=6).grid(row=1, column=2, sticky=tk.W)
         
+        
+
         # Preview section
         preview_frame = ttk.LabelFrame(right_col, text="Live Preview", padding="10")
         preview_frame.grid(row=0, column=0, pady=(10, 8), sticky=(tk.W, tk.E))
@@ -1714,19 +2014,19 @@ class PostcardVideoCreator:
                 self.ending_image_path_var.set(path)
         self._choose_ending_image = _choose
         
-        # Extra image controls
-        extra_frame = ttk.LabelFrame(right_col, text="Extra Image (below last line)", padding="10")
-        extra_frame.grid(row=1, column=0, pady=(8, 8), sticky=(tk.W, tk.E))
-        ttk.Checkbutton(extra_frame, text="Enable", variable=self.ending_image_enabled_var,
+        # Extra image controls (single set for ending)
+        ending_extra_frame = ttk.LabelFrame(right_col, text="Extra Image (below last line)", padding="10")
+        ending_extra_frame.grid(row=1, column=0, pady=(8, 8), sticky=(tk.W, tk.E))
+        ttk.Checkbutton(ending_extra_frame, text="Enable", variable=self.ending_image_enabled_var,
                         command=self.update_ending_preview).grid(row=0, column=0, sticky=tk.W, padx=(0,10))
-        ttk.Button(extra_frame, text="Choose Image...",
+        ttk.Button(ending_extra_frame, text="Choose Image...",
                    command=self._choose_ending_image).grid(row=0, column=1, sticky=tk.W, padx=(0,10))
-        ttk.Entry(extra_frame, textvariable=self.ending_image_path_var, width=40, state='readonly').grid(row=0, column=2, columnspan=3, sticky=(tk.W, tk.E))
-        ttk.Label(extra_frame, text="Image Height:").grid(row=1, column=0, sticky=tk.W, pady=(10,0))
-        ttk.Spinbox(extra_frame, from_=50, to=800, increment=10, textvariable=self.ending_image_height_var,
+        ttk.Entry(ending_extra_frame, textvariable=self.ending_image_path_var, width=40, state='readonly').grid(row=0, column=2, columnspan=3, sticky=(tk.W, tk.E))
+        ttk.Label(ending_extra_frame, text="Image Height:").grid(row=1, column=0, sticky=tk.W, pady=(10,0))
+        ttk.Spinbox(ending_extra_frame, from_=50, to=800, increment=10, textvariable=self.ending_image_height_var,
                     width=8, command=self.update_ending_preview).grid(row=1, column=1, sticky=tk.W, pady=(10,0), padx=(5,15))
-        ttk.Label(extra_frame, text="Spacing (text → image):").grid(row=1, column=2, sticky=tk.W, pady=(10,0))
-        ttk.Spinbox(extra_frame, from_=0, to=300, increment=5, textvariable=self.ending_image_spacing_var,
+        ttk.Label(ending_extra_frame, text="Spacing (text → image):").grid(row=1, column=2, sticky=tk.W, pady=(10,0))
+        ttk.Spinbox(ending_extra_frame, from_=0, to=300, increment=5, textvariable=self.ending_image_spacing_var,
                     width=8, command=self.update_ending_preview).grid(row=1, column=3, sticky=tk.W, pady=(10,0), padx=(5,15))
 
         # Buttons frame
@@ -1858,17 +2158,60 @@ class PostcardVideoCreator:
         ttk.Spinbox(main_frame, from_=0, to=200, increment=10, textvariable=self.start_logo_text_spacing_var, 
                    width=8, command=self.update_start_preview).grid(row=8, column=1, sticky=tk.W, pady=(10, 5))
         
+        # Extra image controls for start
+        start_extra_frame = ttk.LabelFrame(main_frame, text="Extra Image (below last line)", padding="8")
+        start_extra_frame.grid(row=9, column=0, columnspan=6, sticky=(tk.W, tk.E))
+        ttk.Checkbutton(start_extra_frame, text="Enable", variable=self.start_image_enabled_var,
+                        command=self.update_start_preview).grid(row=0, column=0, sticky=tk.W, padx=(0,10))
+        ttk.Button(start_extra_frame, text="Choose Image...",
+                   command=lambda: self._choose_start_image()).grid(row=0, column=1, sticky=tk.W, padx=(0,10))
+        ttk.Entry(start_extra_frame, textvariable=self.start_image_path_var, width=40, state='readonly').grid(row=0, column=2, columnspan=3, sticky=(tk.W, tk.E))
+        ttk.Label(start_extra_frame, text="Image Height:").grid(row=1, column=0, sticky=tk.W, pady=(8,0))
+        ttk.Spinbox(start_extra_frame, from_=50, to=800, increment=10, textvariable=self.start_image_height_var, width=8,
+                    command=self.update_start_preview).grid(row=1, column=1, sticky=tk.W, pady=(8,0))
+        ttk.Label(start_extra_frame, text="Spacing (text → image):").grid(row=1, column=2, sticky=tk.W, pady=(8,0))
+        ttk.Spinbox(start_extra_frame, from_=0, to=300, increment=5, textvariable=self.start_image_spacing_var, width=8,
+                    command=self.update_start_preview).grid(row=1, column=3, sticky=tk.W, pady=(8,0))
+
         # Preview section
         preview_frame = ttk.LabelFrame(main_frame, text="Live Preview", padding="10")
-        preview_frame.grid(row=9, column=0, columnspan=6, pady=(10, 10), sticky=(tk.W, tk.E))
+        preview_frame.grid(row=8, column=0, columnspan=6, pady=(10, 10), sticky=(tk.W, tk.E))
+        preview_frame.columnconfigure(0, weight=1)
         
         # Preview canvas (white background to simulate start screen)
-        self.start_preview_canvas = tk.Canvas(preview_frame, width=600, height=338, bg='white')
-        self.start_preview_canvas.grid(row=0, column=0, pady=(0, 10))
+        self.start_preview_canvas = tk.Canvas(preview_frame, width=480, height=270, bg='white', highlightthickness=1, highlightbackground="#ccc")
+        self.start_preview_canvas.grid(row=0, column=0, sticky=(tk.W, tk.E))
+
+        # Make preview responsive and keep 16:9 so buttons remain visible
+        def _resize_start_preview_canvas(event=None):
+            try:
+                max_w = max(360, preview_frame.winfo_width() - 24)
+            except Exception:
+                max_w = 480
+            # smaller cap so buttons remain visible on short screens
+            target_w = min(max_w, 480)
+            target_h = int(target_w * 9 / 16)
+            if int(self.start_preview_canvas['width']) != target_w or int(self.start_preview_canvas['height']) != target_h:
+                self.start_preview_canvas.configure(width=target_w, height=target_h)
+                self.update_start_preview()
+
+        preview_frame.bind('<Configure>', lambda e: _resize_start_preview_canvas(e))
+        # initialize size once
+        _resize_start_preview_canvas()
+
+        # helper to choose image for start
+        def _choose_start():
+            path = filedialog.askopenfilename(title="Select Start Extra Image",
+                                              filetypes=[("Image Files", "*.png;*.jpg;*.jpeg;*.webp;*.bmp")])
+            if path:
+                self.start_image_path_var.set(path)
+        self._choose_start_image = _choose_start
         
-        # Buttons frame
+        # Buttons frame (ensure visible at bottom)
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=10, column=0, columnspan=6, pady=(10, 5))
+        button_frame.grid(row=11, column=0, columnspan=6, pady=(4, 4), sticky=(tk.W, tk.E))
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=0)
         
         # Save as default button
         save_button = ttk.Button(button_frame, text="💾 Save as Default", 
@@ -1881,7 +2224,7 @@ class PostcardVideoCreator:
         
         # Status label
         self.start_dialog_status_label = ttk.Label(main_frame, text="", foreground="green")
-        self.start_dialog_status_label.grid(row=11, column=0, columnspan=6, pady=(5, 0))
+        self.start_dialog_status_label.grid(row=12, column=0, columnspan=6, pady=(0, 0))
         
         # Bind text changes to preview updates
         self.start_line1_var.trace('w', lambda *args: self.update_start_preview())
@@ -1926,14 +2269,14 @@ class PostcardVideoCreator:
             
             # Canvas dimensions (use actual widget size)
             try:
-                canvas_width = int(self.ending_preview_canvas['width'])
-                canvas_height = int(self.ending_preview_canvas['height'])
+                canvas_width = int(self.start_preview_canvas['width'])
+                canvas_height = int(self.start_preview_canvas['height'])
             except Exception:
-                canvas_width = 520
-                canvas_height = 292
+                canvas_width = 600
+                canvas_height = 338
             if canvas_width <= 0 or canvas_height <= 0:
-                canvas_width = 520
-                canvas_height = 292
+                canvas_width = 600
+                canvas_height = 338
             
             # Video dimensions (actual output)
             video_width = 1920
@@ -1972,6 +2315,16 @@ class PostcardVideoCreator:
             preview_font_scale = int(25 * height_scale)  # Scale based on height ratio
             font1_size = max(8, int(line1_size * preview_font_scale))  # Minimum size of 8
             font2_size = max(8, int(line2_size * preview_font_scale))
+            # Use Tk font metrics for more accurate height in preview
+            try:
+                import tkinter.font as tkfont
+                font1_metrics = tkfont.Font(family=line1_font, size=font1_size, weight='bold')
+                font2_metrics = tkfont.Font(family=line2_font, size=font2_size, weight='bold')
+                line1_px_height = font1_metrics.metrics('linespace') if (line1 and not line1_hidden) else 0
+                line2_px_height = font2_metrics.metrics('linespace') if line2 else 0
+            except Exception:
+                line1_px_height = int(font1_size * 1.2) if (line1 and not line1_hidden) else 0
+                line2_px_height = int(font2_size * 1.2) if line2 else 0
             
             # EXACT SAME POSITIONING LOGIC AS VIDEO - copy from create_start_clip
             logo_height = logo_size_preview
@@ -1981,24 +2334,40 @@ class PostcardVideoCreator:
             # Scale logo_text_spacing for preview (same as other spacing variables)
             logo_text_spacing_preview = int(logo_text_spacing * height_scale)
             
-            # Calculate text heights (approximate)
-            text_height_estimate = int(50 * height_scale)  # Scale for preview
-            total_text_height = 0
-            if line1 and not line1_hidden:
-                total_text_height += text_height_estimate
-            if line2:
-                total_text_height += text_height_estimate
+            # Measure actual rendered text heights on the canvas for perfect centering
+            def _measure_text_height(text, family, size):
+                if not text:
+                    return 0
+                item = self.start_preview_canvas.create_text(0, 0, text=text, font=(family, size, 'bold'), anchor=tk.NW)
+                bbox = self.start_preview_canvas.bbox(item)
+                self.start_preview_canvas.delete(item)
+                if not bbox:
+                    return 0
+                return max(0, bbox[3] - bbox[1])
+
+            h1 = _measure_text_height(line1 if (line1 and not line1_hidden) else "", line1_font, font1_size)
+            h2 = _measure_text_height(line2, line2_font, font2_size)
+            total_text_height = h1 + h2
             
             # Add spacing between text lines
             if line1 and not line1_hidden and line2:
                 total_text_height += adjusted_spacing
             
-            # Total content height = logo + spacing + text
+            # Total content height = logo + spacing + text (+ optional start extra image)
             total_content_height = logo_height + logo_text_spacing_preview + total_text_height
+            # Include start extra image in total height if enabled
+            start_extra_image_enabled = self.start_image_enabled_var.get()
+            start_extra_image_path = self.start_image_path_var.get()
+            start_extra_image_spacing = self.start_image_spacing_var.get()
+            start_extra_image_height = self.start_image_height_var.get()
+            include_start_extra = (start_extra_image_enabled and start_extra_image_path and os.path.exists(start_extra_image_path))
+            if include_start_extra:
+                total_content_height += int(start_extra_image_spacing * height_scale) + int(start_extra_image_height * height_scale)
             
-            # Calculate starting Y position to center everything (EXACT SAME AS VIDEO)
-            available_height = canvas_height - int(100 * height_scale)  # Scale for preview
-            start_y = (available_height - total_content_height) // 2 + int(50 * height_scale)  # Scale for preview
+            # Calculate starting Y position to center everything within the preview canvas
+            # Use full canvas height (no extra margins) for visual centering in the preview
+            available_height = canvas_height
+            start_y = int((available_height - total_content_height) / 2.0)
             
             # Logo position
             logo_y = start_y
@@ -2014,21 +2383,38 @@ class PostcardVideoCreator:
             # Line 1
             if line1 and not line1_hidden:
                 color1 = color_map.get(line1_color, "#000000")
-                y1 = int(text_start_y)  # Convert to integer for consistency
-                self.start_preview_canvas.create_text(canvas_width//2, y1, text=line1, 
-                                                    fill=color1, font=(line1_font, font1_size, 'bold'))
+                y1 = int(text_start_y)
+                self.start_preview_canvas.create_text(canvas_width//2, y1, text=line1,
+                                                    fill=color1, font=(line1_font, font1_size, 'bold'), anchor=tk.N)
             
             # Line 2
             if line2:
                 color2 = color_map.get(line2_color, "#000000")
                 if line1_hidden:
-                    # If line 1 is hidden, line 2 uses the text start position
-                    y2 = int(text_start_y)  # Convert to integer for consistency
+                    y2 = int(text_start_y)
                 else:
-                    # If line 1 is visible, line 2 is positioned below it
-                    y2 = int(text_start_y + adjusted_spacing)  # Convert to integer for consistency
-                self.start_preview_canvas.create_text(canvas_width//2, y2, text=line2, 
-                                                    fill=color2, font=(line2_font, font2_size, 'bold'))
+                    y2 = int(text_start_y + adjusted_spacing)
+                self.start_preview_canvas.create_text(canvas_width//2, y2, text=line2,
+                                                    fill=color2, font=(line2_font, font2_size, 'bold'), anchor=tk.N)
+
+            # Render start extra image in preview
+            if include_start_extra:
+                try:
+                    from PIL import Image, ImageTk
+                    extra_img = Image.open(start_extra_image_path)
+                    w, h = extra_img.size
+                    if h <= 0:
+                        h = 1
+                    new_h = max(1, int(start_extra_image_height * height_scale))
+                    new_w = int(w * (new_h / h))
+                    extra_img = extra_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                    self.start_extra_image_photo = ImageTk.PhotoImage(extra_img)
+                    last_y = text_start_y if (line1_hidden or not line1) else int(text_start_y + adjusted_spacing)
+                    extra_y = int(last_y + int(start_extra_image_spacing * height_scale))
+                    extra_x = (canvas_width - new_w) // 2
+                    self.start_preview_canvas.create_image(extra_x, extra_y, anchor=tk.NW, image=self.start_extra_image_photo)
+                except Exception as e:
+                    print(f"Start preview extra image error: {e}")
                 
         except Exception as e:
             print(f"Start preview update error: {e}")
@@ -2257,6 +2643,15 @@ class PostcardVideoCreator:
                 "start_logo_size": self.start_logo_size_var.get(),
                 "start_logo_text_spacing": self.start_logo_text_spacing_var.get(),
                 "start_line1_hidden": self.start_line1_hidden_var.get(),
+                "start_image_enabled": self.start_image_enabled_var.get(),
+                "start_image_path": self.start_image_path_var.get(),
+                "start_image_height": self.start_image_height_var.get(),
+                "start_image_spacing": self.start_image_spacing_var.get(),
+                # Start fade options
+                "start_fade_in": self.start_fade_in_var.get(),
+                "start_fade_out": self.start_fade_out_var.get(),
+                "start_fade_in_dur": self.start_fade_in_dur_var.get(),
+                "start_fade_out_dur": self.start_fade_out_dur_var.get(),
                 "default_duration": self.default_duration_var.get(),
                 "transition_duration": self.transition_duration_var.get(),
                 "effect": self.effect_var.get(),
@@ -2472,6 +2867,10 @@ class PostcardVideoCreator:
                 self.start_logo_size_var.set(defaults.get("start_logo_size", 300))
                 self.start_logo_text_spacing_var.set(defaults.get("start_logo_text_spacing", 20))
                 self.start_line1_hidden_var.set(defaults.get("start_line1_hidden", False))
+                self.start_image_enabled_var.set(defaults.get("start_image_enabled", False))
+                self.start_image_path_var.set(defaults.get("start_image_path", ""))
+                self.start_image_height_var.set(defaults.get("start_image_height", 200))
+                self.start_image_spacing_var.set(defaults.get("start_image_spacing", 20))
                 self.start_fade_in_var.set(defaults.get("start_fade_in", False))
                 self.start_fade_out_var.set(defaults.get("start_fade_out", False))
                 self.start_fade_in_dur_var.set(defaults.get("start_fade_in_dur", 0.5))
