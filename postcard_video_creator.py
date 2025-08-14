@@ -1774,11 +1774,14 @@ class PostcardVideoCreator:
             
             # EXACT SAME POSITIONING LOGIC AS VIDEO - copy from create_start_clip
             logo_height = logo_size_preview
-            base_spacing = 80  # Same as video - no scaling
-            adjusted_spacing = base_spacing + (text_spacing * 10)  # Same as video - no scaling
+            base_spacing = int(80 * height_scale)  # Scale for preview
+            adjusted_spacing = base_spacing + (text_spacing * int(10 * height_scale))  # Scale for preview
+            
+            # Scale logo_text_spacing for preview (same as other spacing variables)
+            logo_text_spacing_preview = int(logo_text_spacing * height_scale)
             
             # Calculate text heights (approximate)
-            text_height_estimate = 50  # Same as video - no scaling
+            text_height_estimate = int(50 * height_scale)  # Scale for preview
             total_text_height = 0
             if line1 and not line1_hidden:
                 total_text_height += text_height_estimate
@@ -1790,17 +1793,17 @@ class PostcardVideoCreator:
                 total_text_height += adjusted_spacing
             
             # Total content height = logo + spacing + text
-            total_content_height = logo_height + logo_text_spacing + total_text_height
+            total_content_height = logo_height + logo_text_spacing_preview + total_text_height
             
             # Calculate starting Y position to center everything (EXACT SAME AS VIDEO)
-            available_height = canvas_height - 100  # Same as video - no scaling
-            start_y = (available_height - total_content_height) // 2 + 50  # Same as video - no scaling
+            available_height = canvas_height - int(100 * height_scale)  # Scale for preview
+            start_y = (available_height - total_content_height) // 2 + int(50 * height_scale)  # Scale for preview
             
             # Logo position
             logo_y = start_y
             
             # Text start position
-            text_start_y = logo_y + logo_height + logo_text_spacing
+            text_start_y = logo_y + logo_height + logo_text_spacing_preview
             
             # Display logo at calculated position
             if hasattr(self, 'logo_photo'):
@@ -1914,6 +1917,9 @@ class PostcardVideoCreator:
             base_spacing = int(80 * height_scale)  # Scale for preview
             adjusted_spacing = base_spacing + (text_spacing * int(10 * height_scale))  # Scale for preview
             
+            # Scale logo_text_spacing for preview (same as other spacing variables)
+            logo_text_spacing_preview = int(logo_text_spacing * height_scale)
+            
             # Calculate text heights (approximate)
             text_height_estimate = int(50 * height_scale)  # Scale for preview
             total_text_height = 0
@@ -1931,7 +1937,7 @@ class PostcardVideoCreator:
                 total_text_height += adjusted_spacing
             
             # Total content height = logo + spacing + text
-            total_content_height = logo_height + logo_text_spacing + total_text_height
+            total_content_height = logo_height + logo_text_spacing_preview + total_text_height
             
             # Calculate starting Y position to center everything (EXACT SAME AS VIDEO)
             available_height = canvas_height - int(100 * height_scale)  # Scale for preview
@@ -1941,7 +1947,7 @@ class PostcardVideoCreator:
             logo_y = start_y
             
             # Text start position
-            text_start_y = logo_y + logo_height + logo_text_spacing
+            text_start_y = logo_y + logo_height + logo_text_spacing_preview
             
             # Display logo at calculated position
             if hasattr(self, 'ending_logo_photo'):
