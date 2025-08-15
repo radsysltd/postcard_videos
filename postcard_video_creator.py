@@ -2922,14 +2922,14 @@ class PostcardVideoCreator:
         return transition_clip
     
     def create_ending_clip(self, duration=5):
-        """Create an ending clip with logo and text on white background (like start screen)"""
+        """Create an ending clip with logo and text on light gray background (like start screen)"""
         def make_frame(t):
             import numpy as np
             import cv2
             from PIL import Image
             
-            # Create white background for start/end screens regardless of format
-            frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 255
+            # Create light gray background for start/end screens regardless of format
+            frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 220
             
             # Get text lines and styling (3 lines for ending)
             line1 = self.ending_line1_var.get()
@@ -3218,7 +3218,23 @@ class PostcardVideoCreator:
                     new_h = max(1, int(ending_extra_image_height))
                     new_w = int(w * (new_h / h))
                     pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-                    rgb_img = np.array(pil_img.convert('RGB'))
+                    
+                    # Handle transparency properly
+                    if pil_img.mode == 'RGBA':
+                        # Convert RGBA PIL image to numpy array
+                        rgba_img = np.array(pil_img)
+                        rgb_channels = rgba_img[:, :, :3]
+                        alpha_channel = rgba_img[:, :, 3] / 255.0
+                        
+                        # Blend with light gray background (220, 220, 220)
+                        background = np.ones_like(rgb_channels) * 220
+                        blended = rgb_channels * alpha_channel[:, :, np.newaxis] + \
+                                 background * (1 - alpha_channel[:, :, np.newaxis])
+                        rgb_img = blended.astype(np.uint8)
+                    else:
+                        # No transparency, convert normally
+                        rgb_img = np.array(pil_img.convert('RGB'))
+                    
                     last_y = text_start_y
                     visible_offset = 0
                     if line1 and not line1_hidden:
@@ -3262,15 +3278,15 @@ class PostcardVideoCreator:
     
     
     def create_start_clip(self, duration=3, apply_fade_out=None):
-        """Create a start clip with logo and text on white background"""
+        """Create a start clip with logo and text on light gray background"""
         def make_frame(t):
             import numpy as np
             import cv2
             import os
             from PIL import Image
             
-            # Create white background for start/end screens regardless of format
-            frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 255
+            # Create light gray background for start/end screens regardless of format
+            frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 220
             
             # Get text lines and styling
             line1 = self.start_line1_var.get()
@@ -3485,7 +3501,23 @@ class PostcardVideoCreator:
                     new_h = max(1, int(start_extra_image_height))
                     new_w = int(w * (new_h / h))
                     pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-                    rgb_img = np.array(pil_img.convert('RGB'))
+                    
+                    # Handle transparency properly
+                    if pil_img.mode == 'RGBA':
+                        # Convert RGBA PIL image to numpy array
+                        rgba_img = np.array(pil_img)
+                        rgb_channels = rgba_img[:, :, :3]
+                        alpha_channel = rgba_img[:, :, 3] / 255.0
+                        
+                        # Blend with light gray background (220, 220, 220)
+                        background = np.ones_like(rgb_channels) * 220
+                        blended = rgb_channels * alpha_channel[:, :, np.newaxis] + \
+                                 background * (1 - alpha_channel[:, :, np.newaxis])
+                        rgb_img = blended.astype(np.uint8)
+                    else:
+                        # No transparency, convert normally
+                        rgb_img = np.array(pil_img.convert('RGB'))
+                    
                     last_y = text_start_y if (line1_hidden or not line1) else int(text_start_y + adjusted_spacing)
                     extra_y = int(last_y + start_extra_image_spacing)
                     extra_x = (self.video_width - new_w) // 2
@@ -3549,8 +3581,8 @@ class PostcardVideoCreator:
             import numpy as np
             import cv2
             
-            # Create white background
-            frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 255
+            # Create light gray background
+            frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 220
             
             # Get text content and settings
             line1_text = self.second_page_line1_var.get()
