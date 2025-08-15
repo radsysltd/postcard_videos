@@ -169,6 +169,9 @@ class PostcardVideoCreator:
         self.ending_line1_font_var = tk.StringVar(value="Arial")
         self.ending_line2_font_var = tk.StringVar(value="Arial")
         self.ending_line3_font_var = tk.StringVar(value="Arial")
+        self.ending_line1_bold_var = tk.BooleanVar(value=True)
+        self.ending_line2_bold_var = tk.BooleanVar(value=True)
+        self.ending_line3_bold_var = tk.BooleanVar(value=True)
         self.ending_duration_var = tk.DoubleVar(value=5.0)
         
         # Start text variables
@@ -180,6 +183,8 @@ class PostcardVideoCreator:
         self.start_line2_color_var = tk.StringVar(value="black")
         self.start_line1_font_var = tk.StringVar(value="Arial")
         self.start_line2_font_var = tk.StringVar(value="Arial")
+        self.start_line1_bold_var = tk.BooleanVar(value=True)
+        self.start_line2_bold_var = tk.BooleanVar(value=True)
         self.start_duration_var = tk.DoubleVar(value=3.0)
         self.start_text_spacing_var = tk.IntVar(value=1)
         self.start_logo_size_var = tk.IntVar(value=300)
@@ -2192,6 +2197,9 @@ class PostcardVideoCreator:
             line1_font = self.ending_line1_font_var.get()
             line2_font = self.ending_line2_font_var.get()
             line3_font = self.ending_line3_font_var.get()
+            line1_bold = self.ending_line1_bold_var.get()
+            line2_bold = self.ending_line2_bold_var.get()
+            line3_bold = self.ending_line3_bold_var.get()
             
             # Color mapping (RGB format to match preview - since frame is RGB)
             color_map = {
@@ -2225,7 +2233,18 @@ class PostcardVideoCreator:
             
             print(f"DEBUG: Font mapping - Line1: '{line1_font}' -> {font1}, Line2: '{line2_font}' -> {font2}, Line3: '{line3_font}' -> {font3}")
             
-            thickness = 3
+            # Set thickness and font adjustments based on bold settings
+            thickness1 = 6 if line1_bold else 2
+            thickness2 = 6 if line2_bold else 2
+            thickness3 = 6 if line3_bold else 2
+            
+            # For bold text, use a bolder font variant when available
+            if line1_bold and font1 == cv2.FONT_HERSHEY_SIMPLEX:
+                font1 = cv2.FONT_HERSHEY_DUPLEX
+            if line2_bold and font2 == cv2.FONT_HERSHEY_SIMPLEX:
+                font2 = cv2.FONT_HERSHEY_DUPLEX
+            if line3_bold and font3 == cv2.FONT_HERSHEY_SIMPLEX:
+                font3 = cv2.FONT_HERSHEY_DUPLEX
             
             # DYNAMIC VERTICAL CENTERING - Calculate total content height and center it
             logo_text_spacing = getattr(self, 'ending_logo_text_spacing_var', self.start_logo_text_spacing_var).get()
@@ -2371,11 +2390,18 @@ class PostcardVideoCreator:
                 # No fade effect - use full color immediately
                 text_color1 = color1
 
-                (text_width, text_height), _ = cv2.getTextSize(line1, font1, line1_size, thickness)
+                (text_width, text_height), _ = cv2.getTextSize(line1, font1, line1_size, thickness1)
                 x1 = (self.video_width - text_width) // 2
                 y1 = int(text_start_y)  # Convert to integer for OpenCV
-                cv2.putText(frame, line1, (x1, y1), font1, line1_size, text_color1, thickness)
-                print(f"DEBUG: Ending Line 1 - Text: '{line1}', Color: {text_color1}, Pos: ({x1}, {y1})")
+                
+                # Enhanced bold rendering: render multiple times with slight offsets for bold effect
+                if line1_bold:
+                    offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+                    for dx, dy in offsets:
+                        cv2.putText(frame, line1, (x1 + dx, y1 + dy), font1, line1_size, text_color1, 2)
+                
+                cv2.putText(frame, line1, (x1, y1), font1, line1_size, text_color1, thickness1)
+                print(f"DEBUG: Ending Line 1 - Text: '{line1}', Color: {text_color1}, Pos: ({x1}, {y1}), Bold: {line1_bold}")
             else:
                 print(f"DEBUG: Line 1 is empty or None")
             
@@ -2386,14 +2412,21 @@ class PostcardVideoCreator:
                 # No fade effect - use full color immediately
                 text_color2 = color2
 
-                (text_width, text_height), _ = cv2.getTextSize(line2, font2, line2_size, thickness)
+                (text_width, text_height), _ = cv2.getTextSize(line2, font2, line2_size, thickness2)
                 x2 = (self.video_width - text_width) // 2
                 # If line1 is hidden, keep line2 at text_start_y; otherwise below line1
                 if line1 and not line1_hidden:
                     y2 = int(text_start_y + adjusted_spacing)
                 else:
                     y2 = int(text_start_y)
-                cv2.putText(frame, line2, (x2, y2), font2, line2_size, text_color2, thickness)
+                
+                # Enhanced bold rendering: render multiple times with slight offsets for bold effect
+                if line2_bold:
+                    offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+                    for dx, dy in offsets:
+                        cv2.putText(frame, line2, (x2 + dx, y2 + dy), font2, line2_size, text_color2, 2)
+                
+                cv2.putText(frame, line2, (x2, y2), font2, line2_size, text_color2, thickness2)
                 print(f"DEBUG: Ending Line 2 - Text: '{line2}', Color: {text_color2}, Pos: ({x2}, {y2})")
             else:
                 print(f"DEBUG: Line 2 is empty or None")
@@ -2405,7 +2438,7 @@ class PostcardVideoCreator:
                 # No fade effect - use full color immediately
                 text_color3 = color3
 
-                (text_width, text_height), _ = cv2.getTextSize(line3, font3, line3_size, thickness)
+                (text_width, text_height), _ = cv2.getTextSize(line3, font3, line3_size, thickness3)
                 x3 = (self.video_width - text_width) // 2
                 # Determine y3 based on which previous lines are visible
                 visible_offset = 0
@@ -2414,8 +2447,15 @@ class PostcardVideoCreator:
                 if line2 and not line2_hidden:
                     visible_offset += 1
                 y3 = int(text_start_y + (adjusted_spacing * max(visible_offset, 0)))
-                cv2.putText(frame, line3, (x3, y3), font3, line3_size, text_color3, thickness)
-                print(f"DEBUG: Ending Line 3 - Text: '{line3}', Color: {text_color3}, Pos: ({x3}, {y3})")
+                
+                # Enhanced bold rendering: render multiple times with slight offsets for bold effect
+                if line3_bold:
+                    offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+                    for dx, dy in offsets:
+                        cv2.putText(frame, line3, (x3 + dx, y3 + dy), font3, line3_size, text_color3, 2)
+                
+                cv2.putText(frame, line3, (x3, y3), font3, line3_size, text_color3, thickness3)
+                print(f"DEBUG: Ending Line 3 - Text: '{line3}', Color: {text_color3}, Pos: ({x3}, {y3}), Bold: {line3_bold}")
             else:
                 print(f"DEBUG: Line 3 is empty or None")
 
@@ -2495,6 +2535,8 @@ class PostcardVideoCreator:
             line2_color = self.start_line2_color_var.get()
             line1_font = self.start_line1_font_var.get()
             line2_font = self.start_line2_font_var.get()
+            line1_bold = self.start_line1_bold_var.get()
+            line2_bold = self.start_line2_bold_var.get()
             
             # Color mapping (RGB format to match preview - since frame is RGB)
             color_map = {
@@ -2525,7 +2567,15 @@ class PostcardVideoCreator:
             font2 = font_map.get(line2_font, cv2.FONT_HERSHEY_SIMPLEX)
             
             font = cv2.FONT_HERSHEY_SIMPLEX
-            thickness = 3
+            # Set thickness and font adjustments based on bold settings
+            thickness1 = 6 if line1_bold else 2
+            thickness2 = 6 if line2_bold else 2
+            
+            # For bold text, use a bolder font variant when available
+            if line1_bold and font1 == cv2.FONT_HERSHEY_SIMPLEX:
+                font1 = cv2.FONT_HERSHEY_DUPLEX
+            if line2_bold and font2 == cv2.FONT_HERSHEY_SIMPLEX:
+                font2 = cv2.FONT_HERSHEY_DUPLEX
             
             # DYNAMIC VERTICAL CENTERING FOR START SCREEN
             logo_text_spacing = self.start_logo_text_spacing_var.get()
@@ -2637,11 +2687,18 @@ class PostcardVideoCreator:
                 color1 = color_map.get(line1_color, (0, 0, 0))
                 # No fade effect - use full color immediately
                 text_color1 = color1
-                (text_width, text_height), _ = cv2.getTextSize(line1, font1, line1_size, thickness)
+                (text_width, text_height), _ = cv2.getTextSize(line1, font1, line1_size, thickness1)
                 x1 = (self.video_width - text_width) // 2
                 y1 = int(text_start_y)  # Convert to integer for OpenCV
-                cv2.putText(frame, line1, (x1, y1), font1, line1_size, text_color1, thickness)
-                print(f"DEBUG: Ending Line 1 - Text: '{line1}', Color: {text_color1}, Pos: ({x1}, {y1})")
+                
+                # Enhanced bold rendering: render multiple times with slight offsets for bold effect
+                if line1_bold:
+                    offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+                    for dx, dy in offsets:
+                        cv2.putText(frame, line1, (x1 + dx, y1 + dy), font1, line1_size, text_color1, 2)
+                
+                cv2.putText(frame, line1, (x1, y1), font1, line1_size, text_color1, thickness1)
+                print(f"DEBUG: Start Line 1 - Text: '{line1}', Color: {text_color1}, Pos: ({x1}, {y1}), Bold: {line1_bold}")
             else:
                 print(f"DEBUG: Line 1 is empty or None")
             
@@ -2651,13 +2708,20 @@ class PostcardVideoCreator:
                 color2 = color_map.get(line2_color, (0, 0, 0))
                 # No fade effect - use full color immediately
                 text_color2 = color2
-                (text_width, text_height), _ = cv2.getTextSize(line2, font2, line2_size, thickness)
+                (text_width, text_height), _ = cv2.getTextSize(line2, font2, line2_size, thickness2)
                 x2 = (self.video_width - text_width) // 2
                 if line1_hidden or not line1:
                     y2 = int(text_start_y)
                 else:
                     y2 = int(text_start_y + adjusted_spacing)
-                cv2.putText(frame, line2, (x2, y2), font2, line2_size, text_color2, thickness)
+                
+                # Enhanced bold rendering: render multiple times with slight offsets for bold effect
+                if line2_bold:
+                    offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+                    for dx, dy in offsets:
+                        cv2.putText(frame, line2, (x2 + dx, y2 + dy), font2, line2_size, text_color2, 2)
+                
+                cv2.putText(frame, line2, (x2, y2), font2, line2_size, text_color2, thickness2)
                 print(f"DEBUG: Start Line 2 - Text: '{line2}', Color: {text_color2}, Pos: ({x2}, {y2})")
             else:
                 print(f"DEBUG: Line 2 is empty or None")
@@ -2870,6 +2934,8 @@ class PostcardVideoCreator:
                 "start_logo_size": self.start_logo_size_var.get(),
                 "start_logo_text_spacing": self.start_logo_text_spacing_var.get(),
                 "start_line1_hidden": self.start_line1_hidden_var.get(),
+                "start_line1_bold": self.start_line1_bold_var.get(),
+                "start_line2_bold": self.start_line2_bold_var.get(),
                 # Start extra image
                 "start_image_enabled": self.start_image_enabled_var.get(),
                 "start_image_path": self.start_image_path_var.get(),
@@ -2888,6 +2954,9 @@ class PostcardVideoCreator:
                 "ending_line1_font": self.ending_line1_font_var.get(),
                 "ending_line2_font": self.ending_line2_font_var.get(),
                 "ending_line3_font": self.ending_line3_font_var.get(),
+                "ending_line1_bold": self.ending_line1_bold_var.get(),
+                "ending_line2_bold": self.ending_line2_bold_var.get(),
+                "ending_line3_bold": self.ending_line3_bold_var.get(),
                 "ending_duration": self.ending_duration_var.get(),
                 "ending_text_spacing": self.ending_text_spacing_var.get(),
                 "ending_logo_size": self.ending_logo_size_var.get(),
@@ -2998,8 +3067,10 @@ class PostcardVideoCreator:
         ttk.Label(left_col, text="Font:").grid(row=2, column=0, sticky=tk.W)
         line1_font_combo = ttk.Combobox(left_col, textvariable=self.ending_line1_font_var,
                                        values=font_options, width=14)
-        line1_font_combo.grid(row=2, column=1, columnspan=3, sticky=(tk.W, tk.E))
+        line1_font_combo.grid(row=2, column=1, columnspan=2, sticky=(tk.W, tk.E))
         line1_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
+        ttk.Checkbutton(left_col, text="Bold", variable=self.ending_line1_bold_var,
+                        command=self.update_ending_preview).grid(row=2, column=3, sticky=tk.W)
         
         # Line 2
         ttk.Label(left_col, text="Line 2:", font=('Arial', 10, 'bold')).grid(row=3, column=0, sticky=tk.W, pady=(10, 4))
@@ -3018,8 +3089,10 @@ class PostcardVideoCreator:
         ttk.Label(left_col, text="Font:").grid(row=5, column=0, sticky=tk.W)
         line2_font_combo = ttk.Combobox(left_col, textvariable=self.ending_line2_font_var,
                                        values=font_options, width=14)
-        line2_font_combo.grid(row=5, column=1, columnspan=3, sticky=(tk.W, tk.E))
+        line2_font_combo.grid(row=5, column=1, columnspan=2, sticky=(tk.W, tk.E))
         line2_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
+        ttk.Checkbutton(left_col, text="Bold", variable=self.ending_line2_bold_var,
+                        command=self.update_ending_preview).grid(row=5, column=3, sticky=tk.W)
         
         # Line 3
         ttk.Label(left_col, text="Line 3:", font=('Arial', 10, 'bold')).grid(row=6, column=0, sticky=tk.W, pady=(10, 4))
@@ -3038,8 +3111,10 @@ class PostcardVideoCreator:
         ttk.Label(left_col, text="Font:").grid(row=8, column=0, sticky=tk.W)
         line3_font_combo = ttk.Combobox(left_col, textvariable=self.ending_line3_font_var,
                                        values=font_options, width=14)
-        line3_font_combo.grid(row=8, column=1, columnspan=3, sticky=(tk.W, tk.E))
+        line3_font_combo.grid(row=8, column=1, columnspan=2, sticky=(tk.W, tk.E))
         line3_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_ending_preview())
+        ttk.Checkbutton(left_col, text="Bold", variable=self.ending_line3_bold_var,
+                        command=self.update_ending_preview).grid(row=8, column=3, sticky=tk.W)
         
         # Compact layout for spacing and sizes
         ttk.Label(left_col, text="Duration (sec):", font=('Arial', 10, 'bold')).grid(row=9, column=0, sticky=tk.W, pady=(10, 4))
@@ -3195,6 +3270,9 @@ class PostcardVideoCreator:
         line1_font_combo.grid(row=2, column=5, sticky=tk.W)
         line1_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_start_preview())
         
+        ttk.Checkbutton(main_frame, text="Bold", variable=self.start_line1_bold_var,
+                       command=self.update_start_preview).grid(row=2, column=6, sticky=tk.W, padx=(10, 0))
+        
         # Line 2
         ttk.Label(main_frame, text="Line 2:", font=('Arial', 10, 'bold')).grid(row=3, column=0, sticky=tk.W, pady=(15, 5))
         ttk.Entry(main_frame, textvariable=self.start_line2_var, width=40).grid(row=3, column=1, columnspan=5, sticky=tk.W, pady=(15, 5))
@@ -3214,6 +3292,9 @@ class PostcardVideoCreator:
                                        values=font_options, width=12)
         line2_font_combo.grid(row=4, column=5, sticky=tk.W)
         line2_font_combo.bind('<<ComboboxSelected>>', lambda e: self.update_start_preview())
+        
+        ttk.Checkbutton(main_frame, text="Bold", variable=self.start_line2_bold_var,
+                       command=self.update_start_preview).grid(row=4, column=6, sticky=tk.W, padx=(10, 0))
         
         # Start duration
         ttk.Label(main_frame, text="Duration (sec):", font=('Arial', 10, 'bold')).grid(row=5, column=0, sticky=tk.W, pady=(15, 5))
@@ -3335,6 +3416,8 @@ class PostcardVideoCreator:
             line2_color = self.start_line2_color_var.get()
             line1_font = self.start_line1_font_var.get()
             line2_font = self.start_line2_font_var.get()
+            line1_bold = self.start_line1_bold_var.get()
+            line2_bold = self.start_line2_bold_var.get()
             text_spacing = self.start_text_spacing_var.get()
             logo_size = self.start_logo_size_var.get()
             logo_text_spacing = self.start_logo_text_spacing_var.get()
@@ -3471,8 +3554,9 @@ class PostcardVideoCreator:
             if line1 and not line1_hidden:
                 color1 = color_map.get(line1_color, "#000000")
                 y1 = int(text_start_y)
+                font_weight1 = 'bold' if line1_bold else 'normal'
                 self.start_preview_canvas.create_text(canvas_width//2, y1, text=line1, 
-                                                    fill=color1, font=(line1_font, font1_size, 'bold'), anchor=tk.N)
+                                                    fill=color1, font=(line1_font, font1_size, font_weight1), anchor=tk.N)
             
             # Line 2
             if line2:
@@ -3481,8 +3565,9 @@ class PostcardVideoCreator:
                     y2 = int(text_start_y)
                 else:
                     y2 = int(text_start_y + adjusted_spacing)
+                font_weight2 = 'bold' if line2_bold else 'normal'
                 self.start_preview_canvas.create_text(canvas_width//2, y2, text=line2, 
-                                                    fill=color2, font=(line2_font, font2_size, 'bold'), anchor=tk.N)
+                                                    fill=color2, font=(line2_font, font2_size, font_weight2), anchor=tk.N)
 
             # Render start extra image in preview
             if include_start_extra:
@@ -3525,6 +3610,9 @@ class PostcardVideoCreator:
             line1_font = self.ending_line1_font_var.get()
             line2_font = self.ending_line2_font_var.get()
             line3_font = self.ending_line3_font_var.get()
+            line1_bold = self.ending_line1_bold_var.get()
+            line2_bold = self.ending_line2_bold_var.get()
+            line3_bold = self.ending_line3_bold_var.get()
             text_spacing = self.ending_text_spacing_var.get()
             logo_size = self.ending_logo_size_var.get()
             logo_text_spacing = self.ending_logo_text_spacing_var.get()
@@ -3651,8 +3739,9 @@ class PostcardVideoCreator:
             if line1 and not line1_hidden:
                 color1 = color_map.get(line1_color, "#000000")
                 y1 = int(text_start_y)  # Convert to integer for consistency
+                font_weight1 = 'bold' if line1_bold else 'normal'
                 self.ending_preview_canvas.create_text(canvas_width//2, y1, text=line1, 
-                                              fill=color1, font=(line1_font, font1_size, 'bold'))
+                                              fill=color1, font=(line1_font, font1_size, font_weight1))
             
             # Line 2
             if line2 and not line2_hidden:
@@ -3662,8 +3751,9 @@ class PostcardVideoCreator:
                     y2 = int(text_start_y + adjusted_spacing)
                 else:
                     y2 = int(text_start_y)
+                font_weight2 = 'bold' if line2_bold else 'normal'
                 self.ending_preview_canvas.create_text(canvas_width//2, y2, text=line2, 
-                                              fill=color2, font=(line2_font, font2_size, 'bold'))
+                                              fill=color2, font=(line2_font, font2_size, font_weight2))
             
             # Line 3
             if line3 and not line3_hidden:
@@ -3675,8 +3765,9 @@ class PostcardVideoCreator:
                 if line2 and not line2_hidden:
                     visible_offset += 1
                 y3 = int(text_start_y + (adjusted_spacing * max(visible_offset, 0)))
+                font_weight3 = 'bold' if line3_bold else 'normal'
                 self.ending_preview_canvas.create_text(canvas_width//2, y3, text=line3, 
-                                              fill=color3, font=(line3_font, font3_size, 'bold'))
+                                              fill=color3, font=(line3_font, font3_size, font_weight3))
 
             # Extra image rendering (preview)
             if extra_image_enabled and self.ending_image_path_var.get() and os.path.exists(self.ending_image_path_var.get()):
@@ -3953,6 +4044,8 @@ class PostcardVideoCreator:
                 self.start_line2_color_var.set(defaults.get("start_line2_color", "black"))
                 self.start_line1_font_var.set(defaults.get("start_line1_font", "Arial"))
                 self.start_line2_font_var.set(defaults.get("start_line2_font", "Arial"))
+                self.start_line1_bold_var.set(defaults.get("start_line1_bold", True))
+                self.start_line2_bold_var.set(defaults.get("start_line2_bold", True))
                 self.start_duration_var.set(defaults.get("start_duration", 3.0))
                 self.start_text_spacing_var.set(defaults.get("start_text_spacing", 1))
                 self.start_logo_size_var.set(defaults.get("start_logo_size", 300))
@@ -3980,6 +4073,9 @@ class PostcardVideoCreator:
                 self.ending_line1_font_var.set(defaults.get("ending_line1_font", "Arial"))
                 self.ending_line2_font_var.set(defaults.get("ending_line2_font", "Arial"))
                 self.ending_line3_font_var.set(defaults.get("ending_line3_font", "Arial"))
+                self.ending_line1_bold_var.set(defaults.get("ending_line1_bold", True))
+                self.ending_line2_bold_var.set(defaults.get("ending_line2_bold", True))
+                self.ending_line3_bold_var.set(defaults.get("ending_line3_bold", True))
                 self.ending_duration_var.set(defaults.get("ending_duration", 5.0))
                 self.ending_text_spacing_var.set(defaults.get("ending_text_spacing", 1))
                 self.ending_logo_size_var.set(defaults.get("ending_logo_size", 300))
