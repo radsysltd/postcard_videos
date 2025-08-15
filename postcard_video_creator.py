@@ -3200,8 +3200,8 @@ class PostcardVideoCreator:
                                 command=lambda: self.save_defaults_and_close(dialog))
         save_button.grid(row=0, column=0, padx=(0, 10))
         
-        # Close button
-        close_button = ttk.Button(button_frame, text="Close", command=dialog.destroy)
+        # Close button (auto-saves settings)
+        close_button = ttk.Button(button_frame, text="Close", command=lambda: self.save_defaults_and_close(dialog))
         close_button.grid(row=0, column=1, padx=(10, 0))
         
         # Status label
@@ -3386,8 +3386,8 @@ class PostcardVideoCreator:
                                 command=lambda: self.save_start_defaults_and_close(dialog))
         save_button.grid(row=0, column=0, padx=(0, 10))
         
-        # Close button
-        close_button = ttk.Button(button_frame, text="Close", command=dialog.destroy)
+        # Close button (auto-saves settings)
+        close_button = ttk.Button(button_frame, text="Close", command=lambda: self.save_start_defaults_and_close(dialog))
         close_button.grid(row=0, column=1, padx=(10, 0))
         
         # Status label
@@ -3967,6 +3967,13 @@ class PostcardVideoCreator:
                 "start_logo_size": self.start_logo_size_var.get(),
                 "start_logo_text_spacing": self.start_logo_text_spacing_var.get(),
                 "start_line1_hidden": self.start_line1_hidden_var.get(),
+                "start_line1_bold": self.start_line1_bold_var.get(),
+                "start_line2_bold": self.start_line2_bold_var.get(),
+                # Start extra image
+                "start_image_enabled": self.start_image_enabled_var.get(),
+                "start_image_path": self.start_image_path_var.get(),
+                "start_image_height": self.start_image_height_var.get(),
+                "start_image_spacing": self.start_image_spacing_var.get(),
                 # Ending screen settings
                 "ending_line1": self.ending_line1_var.get(),
                 "ending_line2": self.ending_line2_var.get(),
@@ -3980,6 +3987,9 @@ class PostcardVideoCreator:
                 "ending_line1_font": self.ending_line1_font_var.get(),
                 "ending_line2_font": self.ending_line2_font_var.get(),
                 "ending_line3_font": self.ending_line3_font_var.get(),
+                "ending_line1_bold": self.ending_line1_bold_var.get(),
+                "ending_line2_bold": self.ending_line2_bold_var.get(),
+                "ending_line3_bold": self.ending_line3_bold_var.get(),
                 "ending_duration": self.ending_duration_var.get(),
                 "ending_text_spacing": self.ending_text_spacing_var.get(),
                 "ending_logo_size": self.ending_logo_size_var.get(),
