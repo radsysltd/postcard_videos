@@ -111,6 +111,7 @@ class PostcardVideoCreator:
         # Variables
         self.postcard_images = []  # List of image paths in order
         self.image_durations = []  # List of durations for each image
+        self.image_included = []  # List of boolean values for each image (checked/unchecked)
         self.output_path = r"C:\_postcards\renamed_postcards\videos"
         self.is_processing = False
         self.latest_video_path = None  # Track the most recently created video
@@ -323,25 +324,42 @@ class PostcardVideoCreator:
         list_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
         
         # Create Treeview for postcard images
-        columns = ('Image #', 'Image Name', 'Duration (s)', 'Type', 'Status')
+        columns = ('✓', 'Image #', 'Filename', 'Duration (s)', 'Type', 'Status')
         self.tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=8)
         
         for col in columns:
             self.tree.heading(col, text=col)
-            if col == 'Image #':
+            if col == '✓':
+                self.tree.column(col, width=50)
+            elif col == 'Image #':
                 self.tree.column(col, width=80)
             elif col == 'Duration (s)':
                 self.tree.column(col, width=100)
             elif col == 'Type':
                 self.tree.column(col, width=80)
+            elif col == 'Filename':
+                self.tree.column(col, width=220)
             else:
-                self.tree.column(col, width=200)
+                self.tree.column(col, width=120)
         
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         
         self.tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # Bind click event for checkbox column (moved after other bindings)
+        print("DEBUG: Tree click binding will be set up after other bindings")
+        
+        # Control buttons for checkbox management
+        control_button_frame = ttk.Frame(file_frame)
+        control_button_frame.grid(row=2, column=0, columnspan=4, pady=(5, 0), sticky=tk.W)
+        ttk.Button(control_button_frame, text="📋 Copy Selected Filename", 
+                  command=self.copy_selected_filename).grid(row=0, column=0, padx=(0, 10))
+        ttk.Button(control_button_frame, text="☑ Select All", 
+                  command=self.select_all_images).grid(row=0, column=1, padx=(0, 10))
+        ttk.Button(control_button_frame, text="☐ Deselect All", 
+                  command=self.deselect_all_images).grid(row=0, column=2, padx=(0, 10))
         
         # Preview frame
         preview_frame = ttk.LabelFrame(main_frame, text="Preview", padding="10")
@@ -364,6 +382,16 @@ class PostcardVideoCreator:
         # Bind tree selection and double-click for editing duration
         self.tree.bind('<<TreeviewSelect>>', self.on_tree_select)
         self.tree.bind('<Double-1>', self.on_tree_double_click)
+        
+        # Store last click position for checkbox detection
+        self.last_click_x = 0
+        self.last_click_y = 0
+        
+        # Bind click event for checkbox column - try multiple event types
+        print("DEBUG: Setting up tree click binding after other events")
+        self.tree.bind('<Button-1>', self.on_tree_click, add='+')  
+        self.tree.bind('<ButtonRelease-1>', self.on_tree_click_release, add='+')
+        print("DEBUG: Tree click binding set up successfully")
         
         # Progress and control frame
         control_frame = ttk.Frame(main_frame)
@@ -456,6 +484,7 @@ class PostcardVideoCreator:
         # Clear existing data
         self.postcard_images.clear()
         self.image_durations.clear()
+        self.image_included.clear()
         for item in self.tree.get_children():
             self.tree.delete(item)
             
@@ -463,14 +492,15 @@ class PostcardVideoCreator:
         for i, path in enumerate(image_paths):
             self.postcard_images.append(path)
             self.image_durations.append(self.default_duration)
+            self.image_included.append(True)  # All images checked by default
             
             # Determine if it's front or back
             image_type = "Front" if i % 2 == 0 else "Back"
             postcard_num = (i // 2) + 1
             
             # Add to treeview
-            image_name = os.path.basename(path)
-            self.tree.insert('', 'end', values=(f"{i+1}", image_name, str(self.default_duration), image_type, "Ready"))
+            filename = os.path.basename(path)
+            self.tree.insert('', 'end', values=("☑", f"{i+1}", filename, f"{self.default_duration}s", image_type, "Ready"))
             
         # No dialog box - just update status
         self.status_label.config(text=f"Added {len(image_paths)} images ({len(image_paths)//2} postcards)")
@@ -481,6 +511,7 @@ class PostcardVideoCreator:
     def clear_all_images(self):
         self.postcard_images.clear()
         self.image_durations.clear()
+        self.image_included.clear()
         for item in self.tree.get_children():
             self.tree.delete(item)
         self.update_create_button_state()
@@ -876,29 +907,33 @@ class PostcardVideoCreator:
         # Add front image
         self.postcard_images.append(front_path)
         self.image_durations.append(self.default_duration)
+        self.image_included.append(True)  # All images checked by default
         
         # Add back image  
         self.postcard_images.append(back_path)
         self.image_durations.append(self.default_duration)
+        self.image_included.append(True)  # All images checked by default
         
         # Update tree view
         index = len(self.postcard_images) - 2  # Front image index
         
         # Add front
         self.tree.insert('', 'end', values=(
+            "☑",
             f"{index//2 + 1}",
-            "Front",
             os.path.basename(front_path),
             f"{self.default_duration}s",
+            "Front",
             title
         ))
         
         # Add back
         self.tree.insert('', 'end', values=(
+            "☑",
             f"{index//2 + 1}",
-            "Back", 
             os.path.basename(back_path),
             f"{self.default_duration}s",
+            "Back", 
             title
         ))
         
@@ -937,6 +972,15 @@ class PostcardVideoCreator:
                 self.button_status_label.config(text="⏳ Waiting for images and output folder", foreground='orange')
             
     def on_tree_select(self, event):
+        # Check if this selection was caused by a checkbox click
+        print(f"DEBUG: Tree selection event triggered")
+        if hasattr(self, 'last_click_x') and hasattr(self, 'last_click_y'):
+            print(f"DEBUG: Checking if last click at ({self.last_click_x}, {self.last_click_y}) was on checkbox")
+            # Try to process the last click as a checkbox click
+            if self.process_checkbox_click(self.last_click_x, self.last_click_y):
+                print("DEBUG: Checkbox click processed, skipping normal selection")
+                return  # Skip normal preview if checkbox was clicked
+        
         selection = self.tree.selection()
         if selection:
             item = selection[0]
@@ -1040,7 +1084,130 @@ class PostcardVideoCreator:
         self.preview_canvas.delete("all")
         self.preview_label.config(text="No image selected")
         self.preview_info.config(text="")
+    
+    def copy_selected_filename(self):
+        """Copy the filename of the selected image to clipboard"""
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showinfo("No Selection", "Please select an image from the table first.")
+            return
         
+        # Get the filename from the selected row (column index 2 for 'Filename' now with checkbox)
+        item = self.tree.item(selected[0])
+        values = item['values']
+        if len(values) >= 3:
+            filename = values[2]  # Filename is the third column now
+            
+            # Copy to clipboard
+            self.root.clipboard_clear()
+            self.root.clipboard_append(filename)
+            self.root.update()  # Ensure clipboard is updated
+            
+            # Show confirmation
+            self.status_label.config(text=f"📋 Copied filename: {filename}")
+            # Reset status after 3 seconds
+            self.root.after(3000, lambda: self.status_label.config(text="Ready"))
+        else:
+            messagebox.showerror("Error", "Could not retrieve filename from selected item.")
+    
+    def on_tree_click(self, event):
+        """Handle clicks on the tree - toggle checkbox if clicked on checkbox column"""
+        print(f"DEBUG: Tree click detected at ({event.x}, {event.y})")
+        
+        # Store click position for other handlers
+        self.last_click_x = event.x
+        self.last_click_y = event.y
+        
+        # Try to process checkbox click immediately
+        self.process_checkbox_click(event.x, event.y)
+    
+    def process_checkbox_click(self, x, y):
+        """Process potential checkbox click at given coordinates"""
+        region = self.tree.identify_region(x, y)
+        print(f"DEBUG: Region: {region}")
+        if region == "cell":
+            column = self.tree.identify_column(x)  # Only needs x coordinate
+            print(f"DEBUG: Column: {column}")
+            if column == "#1":  # First column is the checkbox
+                item = self.tree.identify_row(y)  # Only needs y coordinate
+                print(f"DEBUG: Item: {item}")
+                if item:
+                    try:
+                        # Get the row index
+                        row_index = list(self.tree.get_children()).index(item)
+                        print(f"DEBUG: Row index: {row_index}, Current state: {self.image_included[row_index]}")
+                        
+                        # Toggle the checkbox state
+                        self.image_included[row_index] = not self.image_included[row_index]
+                        print(f"DEBUG: New state: {self.image_included[row_index]}")
+                        
+                        # Update the display
+                        current_values = list(self.tree.item(item)['values'])
+                        current_values[0] = "☑" if self.image_included[row_index] else "☐"
+                        self.tree.item(item, values=current_values)
+                        print(f"DEBUG: Updated display values: {current_values}")
+                        
+                        # Update status
+                        checked_count = sum(self.image_included)
+                        total_count = len(self.image_included)
+                        self.status_label.config(text=f"Images selected: {checked_count}/{total_count}")
+                        print(f"DEBUG: Status updated: {checked_count}/{total_count}")
+                        
+                        return True  # Successfully processed checkbox click
+                    except Exception as e:
+                        print(f"DEBUG: Error processing checkbox click: {e}")
+            else:
+                print(f"DEBUG: Click not on checkbox column (column {column})")
+        else:
+            print(f"DEBUG: Click not in cell region")
+        return False
+    
+    def on_tree_click_release(self, event):
+        """Alternative click handler for ButtonRelease"""
+        print(f"DEBUG: Tree click RELEASE detected at ({event.x}, {event.y})")
+        # Call the same logic as the main click handler
+        self.on_tree_click(event)
+    
+    def select_all_images(self):
+        """Select all images (check all checkboxes)"""
+        for i in range(len(self.image_included)):
+            self.image_included[i] = True
+        
+        # Update display
+        for i, item in enumerate(self.tree.get_children()):
+            current_values = list(self.tree.item(item)['values'])
+            current_values[0] = "☑"
+            self.tree.item(item, values=current_values)
+        
+        # Update status
+        self.status_label.config(text=f"Images selected: {len(self.image_included)}/{len(self.image_included)}")
+    
+    def deselect_all_images(self):
+        """Deselect all images (uncheck all checkboxes)"""
+        for i in range(len(self.image_included)):
+            self.image_included[i] = False
+        
+        # Update display
+        for i, item in enumerate(self.tree.get_children()):
+            current_values = list(self.tree.item(item)['values'])
+            current_values[0] = "☐"
+            self.tree.item(item, values=current_values)
+        
+        # Update status
+        self.status_label.config(text=f"Images selected: 0/{len(self.image_included)}")
+        
+    def get_included_images(self):
+        """Get lists of only the checked/included images and their durations"""
+        included_images = []
+        included_durations = []
+        
+        for i, included in enumerate(self.image_included):
+            if included:
+                included_images.append(self.postcard_images[i])
+                included_durations.append(self.image_durations[i])
+        
+        return included_images, included_durations
+    
     def create_video(self):
         print("DEBUG: create_video method called")  # Debug output
         if self.is_processing:
@@ -1060,6 +1227,17 @@ class PostcardVideoCreator:
         if not self.postcard_images:
             print("DEBUG: No postcard images")  # Debug output
             messagebox.showerror("Error", "Please add at least one postcard image")
+            return
+        
+        # Check if any images are selected (checked)
+        included_images, included_durations = self.get_included_images()
+        if not included_images:
+            messagebox.showerror("Error", "Please check at least one image to include in the video")
+            return
+        
+        # Check if we have an even number of included images
+        if len(included_images) % 2 != 0:
+            messagebox.showerror("Error", f"You have {len(included_images)} images selected. Please select an even number of images.\n\nYou need pairs: front and back images for each postcard.")
             return
             
         if len(self.postcard_images) % 2 != 0:
@@ -1098,63 +1276,54 @@ class PostcardVideoCreator:
         thread.start()
     
     def calculate_total_postcard_duration(self):
-        """Calculate total duration of all postcard images"""
-        return sum(self.image_durations)
+        """Calculate total duration of all included postcard images"""
+        included_images, included_durations = self.get_included_images()
+        return sum(included_durations)
     
     def calculate_video_batches(self):
-        """Split postcards into batches of approximately 60 seconds each, with minimum 5 pairs per batch"""
+        """Split included postcards into batches of approximately 60 seconds each, with minimum 5 pairs per batch"""
         max_duration_per_video = 60.0  # Maximum seconds of postcard content per video
         min_pairs_per_video = 5  # Minimum number of postcard pairs per video
         
-        total_pairs = len(self.postcard_images) // 2
+        # Get only included images and their indices
+        included_images, included_durations = self.get_included_images()
+        included_indices = [i for i, included in enumerate(self.image_included) if included]
+        
+        total_pairs = len(included_images) // 2
+        total_duration = sum(included_durations)
+        
+        logging.info(f"BATCHING: Total pairs: {total_pairs}, Total duration: {total_duration:.1f}s")
+        logging.info(f"BATCHING: Max duration per video: {max_duration_per_video}s, Min pairs per video: {min_pairs_per_video}")
+        print(f"Calculating video batches for {total_pairs} pairs ({total_duration:.1f}s total) - check log for details")
         
         # If we have fewer than minimum pairs total, return single batch
         if total_pairs < min_pairs_per_video:
-            logging.info(f"DEBUG: Only {total_pairs} pairs total, creating single video")
-            return [list(range(len(self.postcard_images)))]
+            logging.info(f"BATCHING: Only {total_pairs} pairs total (< {min_pairs_per_video}), creating single video")
+            return [included_indices]
         
-        batches = []
-        current_batch = []
-        current_duration = 0.0
-        
-        # Calculate durations for each pair
+        # Calculate durations for each included pair
         pair_durations = []
-        for i in range(0, len(self.postcard_images), 2):
-            if i + 1 >= len(self.postcard_images):
+        for i in range(0, len(included_indices), 2):
+            if i + 1 >= len(included_indices):
                 break
-            front_duration = self.image_durations[i]
-            back_duration = self.image_durations[i + 1]
+            front_idx = included_indices[i]
+            back_idx = included_indices[i + 1]
+            front_duration = self.image_durations[front_idx]
+            back_duration = self.image_durations[back_idx]
             pair_durations.append(front_duration + back_duration)
         
-        # Process images in pairs (front and back)
-        for pair_idx, i in enumerate(range(0, len(self.postcard_images), 2)):
-            if i + 1 >= len(self.postcard_images):
-                break  # Ensure we have a complete pair
-                
-            pair_duration = pair_durations[pair_idx]
-            
-            # Check if adding this pair would exceed the limit AND we have minimum pairs
-            current_pairs = len(current_batch) // 2
-            if (current_duration + pair_duration > max_duration_per_video and 
-                current_pairs >= min_pairs_per_video):
-                # Start a new batch
-                batches.append(current_batch)
-                current_batch = []
-                current_duration = 0.0
-            
-            # Add the pair to current batch
-            current_batch.extend([i, i + 1])  # Add indices for front and back
-            current_duration += pair_duration
+        logging.info(f"BATCHING: Processing {len(pair_durations)} pairs with durations: {[f'{d:.1f}s' for d in pair_durations]}")
         
-        # Add the last batch if it has content
-        if current_batch:
-            batches.append(current_batch)
+        # Use smart batching algorithm for balanced distribution
+        batches = self._create_balanced_batches(included_indices, pair_durations, max_duration_per_video, min_pairs_per_video)
+        
+        logging.info(f"BATCHING: Created {len(batches)} batches before post-processing")
         
         # Post-process: ensure no batch has fewer than minimum pairs (except if only one batch)
         if len(batches) > 1:
-            logging.info(f"DEBUG: Before adjustment: {len(batches)} batches")
+            logging.info(f"BATCHING: Before adjustment: {len(batches)} batches")
             batches = self._ensure_minimum_pairs_per_batch(batches, min_pairs_per_video)
-            logging.info(f"DEBUG: After adjustment: {len(batches)} batches")
+            logging.info(f"BATCHING: After adjustment: {len(batches)} batches")
         
         # Log the final batching decision
         for i, batch in enumerate(batches):
@@ -1164,12 +1333,151 @@ class PostcardVideoCreator:
         
         return batches
     
+    def _create_balanced_batches(self, included_indices, pair_durations, max_duration_per_video, min_pairs_per_video):
+        """Create balanced batches that distribute pairs more evenly"""
+        total_pairs = len(pair_durations)
+        total_duration = sum(pair_durations)
+        
+        # Estimate optimal number of batches
+        if total_duration <= max_duration_per_video:
+            # Everything fits in one batch
+            logging.info(f"BATCHING: All {total_pairs} pairs fit in single batch ({total_duration:.1f}s)")
+            return [included_indices]
+        
+        # Calculate how many batches we should ideally have
+        estimated_batches = max(2, int(total_duration / max_duration_per_video) + 1)
+        target_pairs_per_batch = total_pairs / estimated_batches
+        
+        logging.info(f"BATCHING: Target: {estimated_batches} batches, ~{target_pairs_per_batch:.1f} pairs each")
+        
+        # Try different batch distributions to find the most balanced one
+        best_batches = None
+        best_score = float('inf')
+        
+        # Try 2 to 4 batches (reasonable range)
+        for num_batches in range(2, min(5, total_pairs // min_pairs_per_video + 1)):
+            batch_distribution = self._try_batch_distribution(
+                included_indices, pair_durations, num_batches, 
+                max_duration_per_video, min_pairs_per_video
+            )
+            
+            if batch_distribution:
+                score = self._score_batch_distribution(batch_distribution, pair_durations)
+                logging.info(f"BATCHING: Trying {num_batches} batches - Score: {score:.2f}")
+                
+                if score < best_score:
+                    best_score = score
+                    best_batches = batch_distribution
+        
+        if best_batches:
+            # Log the final distribution
+            for i, batch in enumerate(best_batches):
+                pairs_count = len(batch) // 2
+                batch_duration = sum(pair_durations[j] for j in range(pairs_count))
+                logging.info(f"BATCHING: Final Batch {i+1}: {pairs_count} pairs, {batch_duration:.1f}s")
+            return best_batches
+        else:
+            # Fall back to greedy algorithm if balanced approach fails
+            logging.info("BATCHING: Balanced approach failed, using greedy fallback")
+            return self._create_greedy_batches(included_indices, pair_durations, max_duration_per_video, min_pairs_per_video)
+    
+    def _try_batch_distribution(self, included_indices, pair_durations, num_batches, max_duration, min_pairs):
+        """Try to distribute pairs into specified number of batches"""
+        total_pairs = len(pair_durations)
+        
+        # Calculate target pairs per batch
+        base_pairs = total_pairs // num_batches
+        extra_pairs = total_pairs % num_batches
+        
+        # Create target sizes: some batches get base_pairs, others get base_pairs + 1
+        batch_sizes = [base_pairs + (1 if i < extra_pairs else 0) for i in range(num_batches)]
+        
+        # Check if any batch would be too small
+        if any(size < min_pairs for size in batch_sizes):
+            return None
+        
+        # Create batches based on calculated sizes
+        batches = []
+        start_idx = 0
+        
+        for batch_size in batch_sizes:
+            end_idx = start_idx + batch_size * 2  # *2 because each pair = 2 images
+            batch = included_indices[start_idx:end_idx]
+            
+            # Check duration constraint
+            batch_duration = sum(pair_durations[start_idx//2:(start_idx//2) + batch_size])
+            if batch_duration > max_duration * 1.2:  # Allow 20% flexibility
+                return None
+                
+            batches.append(batch)
+            start_idx = end_idx
+        
+        return batches
+    
+    def _score_batch_distribution(self, batches, pair_durations):
+        """Score a batch distribution - lower is better"""
+        # Calculate variance in batch sizes (prefer even distribution)
+        batch_sizes = [len(batch) // 2 for batch in batches]
+        mean_size = sum(batch_sizes) / len(batch_sizes)
+        size_variance = sum((size - mean_size) ** 2 for size in batch_sizes) / len(batch_sizes)
+        
+        # Calculate variance in durations 
+        batch_durations = []
+        for i, batch in enumerate(batches):
+            pairs_in_batch = len(batch) // 2
+            duration = sum(pair_durations[j] for j in range(pairs_in_batch))
+            batch_durations.append(duration)
+        
+        mean_duration = sum(batch_durations) / len(batch_durations)
+        duration_variance = sum((dur - mean_duration) ** 2 for dur in batch_durations) / len(batch_durations)
+        
+        # Combine scores (prioritize even pair distribution)
+        score = size_variance * 2 + duration_variance
+        return score
+    
+    def _create_greedy_batches(self, included_indices, pair_durations, max_duration_per_video, min_pairs_per_video):
+        """Fallback greedy algorithm (original logic)"""
+        batches = []
+        current_batch = []
+        current_duration = 0.0
+        
+        for pair_idx, i in enumerate(range(0, len(included_indices), 2)):
+            if i + 1 >= len(included_indices):
+                break
+                
+            pair_duration = pair_durations[pair_idx]
+            current_pairs = len(current_batch) // 2
+            
+            # Check if adding this pair would exceed the limit AND we have minimum pairs
+            if (current_duration + pair_duration > max_duration_per_video and 
+                current_pairs >= min_pairs_per_video):
+                # Start a new batch
+                batches.append(current_batch)
+                current_batch = []
+                current_duration = 0.0
+            
+            # Add the pair to current batch
+            front_idx = included_indices[i]
+            back_idx = included_indices[i + 1]
+            current_batch.extend([front_idx, back_idx])
+            current_duration += pair_duration
+        
+        # Add the last batch if it has content
+        if current_batch:
+            batches.append(current_batch)
+            
+        return batches
+    
     def _ensure_minimum_pairs_per_batch(self, batches, min_pairs_per_video):
         """Ensure no batch has fewer than minimum pairs by redistributing or merging"""
         if not batches:
             return batches
             
-        # Check if any batch (except possibly the last) has too few pairs
+        # If we only have one batch, always keep it regardless of size
+        if len(batches) == 1:
+            return batches
+            
+        # Check if any batch has too few pairs
         adjusted_batches = []
         i = 0
         
@@ -1184,16 +1492,26 @@ class PostcardVideoCreator:
             else:
                 # This batch has too few pairs
                 if i == len(batches) - 1:
-                    # Last batch with too few pairs - merge with previous batch
+                    # Last batch with too few pairs
+                    # Only merge if the combined batch wouldn't be too long (>90s)
                     if adjusted_batches:
-                        logging.info(f"DEBUG: Merging last batch ({current_pairs} pairs) with previous batch")
-                        adjusted_batches[-1].extend(current_batch)
+                        last_batch_pairs = len(adjusted_batches[-1]) // 2
+                        combined_pairs = last_batch_pairs + current_pairs
+                        estimated_duration = combined_pairs * 8.0  # Assuming 8s per pair
+                        
+                        if estimated_duration <= 72.0:  # Allow up to 72s for merged batch (about 20% over target)
+                            logging.info(f"BATCHING: Merging last batch ({current_pairs} pairs) with previous batch")
+                            adjusted_batches[-1].extend(current_batch)
+                        else:
+                            # Keep the small batch separate if merging would be too long
+                            logging.info(f"BATCHING: Keeping small last batch ({current_pairs} pairs) separate to avoid overly long video")
+                            adjusted_batches.append(current_batch)
                     else:
                         # Only one batch total, keep it
                         adjusted_batches.append(current_batch)
                 else:
                     # Not the last batch - merge with next batch
-                    logging.info(f"DEBUG: Merging batch ({current_pairs} pairs) with next batch")
+                    logging.info(f"BATCHING: Merging batch ({current_pairs} pairs) with next batch")
                     next_batch = batches[i + 1]
                     merged_batch = current_batch + next_batch
                     adjusted_batches.append(merged_batch)
