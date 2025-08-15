@@ -72,10 +72,10 @@
   "ending_fade_in_dur": 0.5,
   "ending_fade_out_dur": 0.5,
   "default_duration": "4",
-  "transition_duration": "0.5",
+  "transition_duration": "1",
   "effect": "fade",
   "music": "Random",
-  "music_volume": 0.3,
+  "music_volume": 0.5232558139534884,
   "background_color": "light_gray",
   "starting_part_number": 1
 }

@@ -464,6 +464,9 @@ class PostcardVideoCreator:
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
         
+        # Initialize music dropdown with actual music files from the music directory
+        self.update_music_dropdown()
+        
     def update_resolution(self, event=None):
         resolution = self.resolution_var.get()
         if resolution == "1920x1080":
@@ -1217,7 +1220,7 @@ class PostcardVideoCreator:
         self.preview_canvas.delete("all")
         self.preview_label.config(text="No image selected")
         self.preview_info.config(text="")
-    
+        
     def copy_selected_filename(self):
         """Copy the filename of the selected image to clipboard"""
         selected = self.tree.selection()
@@ -1598,7 +1601,7 @@ class PostcardVideoCreator:
         # Add the last batch if it has content
         if current_batch:
             batches.append(current_batch)
-            
+        
         return batches
     
     def _ensure_minimum_pairs_per_batch(self, batches, min_pairs_per_video):
