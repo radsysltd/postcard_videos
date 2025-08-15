@@ -207,6 +207,28 @@ class PostcardVideoCreator:
         self.ending_image_height_var = tk.IntVar(value=200)
         self.ending_image_spacing_var = tk.IntVar(value=20)
         
+        # Second page variables
+        self.second_page_enabled_var = tk.BooleanVar(value=False)
+        self.second_page_line1_var = tk.StringVar(value="Welcome to our collection")
+        self.second_page_line2_var = tk.StringVar(value="Discover amazing postcards")
+        self.second_page_line1_bold_var = tk.BooleanVar(value=False)
+        self.second_page_line2_bold_var = tk.BooleanVar(value=False)
+        self.second_page_line1_italic_var = tk.BooleanVar(value=False)
+        self.second_page_line2_italic_var = tk.BooleanVar(value=False)
+        self.second_page_line1_size_var = tk.IntVar(value=60)
+        self.second_page_line2_size_var = tk.IntVar(value=50)
+        self.second_page_line1_y_var = tk.IntVar(value=450)
+        self.second_page_line2_y_var = tk.IntVar(value=580)
+        self.second_page_max_chars_var = tk.IntVar(value=30)
+        self.second_page_duration_var = tk.DoubleVar(value=3.0)
+        self.second_page_line1_color_var = tk.StringVar(value="#000000")
+        self.second_page_line2_color_var = tk.StringVar(value="#000000")
+        # Second page fade effects
+        self.second_page_fade_in_var = tk.BooleanVar(value=False)
+        self.second_page_fade_out_var = tk.BooleanVar(value=False)
+        self.second_page_fade_in_dur_var = tk.DoubleVar(value=0.5)
+        self.second_page_fade_out_dur_var = tk.DoubleVar(value=0.5)
+        
         self.setup_ui()
         
         # Load saved defaults after UI is set up
@@ -244,7 +266,7 @@ class PostcardVideoCreator:
         default_duration_entry.grid(row=0, column=1, sticky=tk.W, padx=(0, 20))
         
         ttk.Label(settings_frame, text="Transition Duration (seconds):").grid(row=0, column=2, sticky=tk.W, padx=(0, 5))
-        self.transition_duration_var = tk.StringVar(value=str(self.transition_duration))
+        self.transition_duration_var = tk.StringVar(value="1.0")
         transition_duration_entry = ttk.Entry(settings_frame, textvariable=self.transition_duration_var, width=10)
         transition_duration_entry.grid(row=0, column=3, sticky=tk.W)
         
@@ -308,6 +330,10 @@ class PostcardVideoCreator:
         # Start text configuration button
         start_config_button = ttk.Button(settings_frame, text="🎬 Configure Start Text", command=self.open_start_config)
         start_config_button.grid(row=4, column=2, columnspan=2, sticky=tk.W, pady=(10, 0))
+        
+        # Second page configuration button
+        second_page_config_button = ttk.Button(settings_frame, text="📄 Configure Second Page", command=self.open_second_page_config)
+        second_page_config_button.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
         
         # File selection frame
         file_frame = ttk.LabelFrame(main_frame, text="Postcard Images", padding="10")
@@ -1660,6 +1686,46 @@ class PostcardVideoCreator:
         
         return None
     
+    def _wrap_text(self, text, max_chars):
+        """Wrap text to fit within max_chars without breaking words, handling line breaks"""
+        if not text:
+            return [""]
+        
+        # Split by manual line breaks first
+        manual_lines = text.split('\n')
+        all_lines = []
+        
+        for manual_line in manual_lines:
+            if len(manual_line) <= max_chars:
+                all_lines.append(manual_line)
+            else:
+                # Wrap this line if it's too long
+                words = manual_line.split()
+                current_line = ""
+                
+                for word in words:
+                    # If adding this word would exceed the limit
+                    if len(current_line) + len(word) + (1 if current_line else 0) > max_chars:
+                        # If current line is not empty, save it
+                        if current_line:
+                            all_lines.append(current_line)
+                            current_line = word
+                        else:
+                            # Word itself is longer than max_chars, add it anyway
+                            all_lines.append(word)
+                    else:
+                        # Add word to current line
+                        if current_line:
+                            current_line += " " + word
+                        else:
+                            current_line = word
+                
+                # Add the last line if not empty
+                if current_line:
+                    all_lines.append(current_line)
+        
+        return all_lines if all_lines else [""]
+    
     def process_videos_in_batches(self, batches):
         """Process multiple videos based on the calculated batches"""
         try:
@@ -1781,10 +1847,12 @@ class PostcardVideoCreator:
             start_duration = self.start_duration_var.get()
             
             # Apply the same fade logic as the original process_video method
-            # Don't apply fade-out to start clip if we're creating a manual transition
+            # Don't apply fade-out to start clip if we're creating a manual transition, but DO apply if second page is enabled
             will_create_manual_transition = len(batch_indices) > 0 and self.start_fade_out_var.get()
-            apply_fade_out = self.start_fade_out_var.get() and not will_create_manual_transition
-            logging.info(f"DEBUG: Fade logic - batch_images: {len(batch_indices)}, fade_out_enabled: {self.start_fade_out_var.get()}")
+            second_page_enabled = self.second_page_enabled_var.get()
+            # Apply fade-out if: start_fade_out enabled OR second page enabled (for smooth transition)
+            apply_fade_out = (self.start_fade_out_var.get() and not will_create_manual_transition) or second_page_enabled
+            logging.info(f"DEBUG: Fade logic - batch_images: {len(batch_indices)}, fade_out_enabled: {self.start_fade_out_var.get()}, second_page_enabled: {second_page_enabled}")
             logging.info(f"DEBUG: will_create_manual_transition: {will_create_manual_transition}, apply_fade_out: {apply_fade_out}")
             
             logging.info(f"DEBUG: Creating start clip with duration {start_duration}s")
@@ -1793,6 +1861,20 @@ class PostcardVideoCreator:
                 raise Exception("Failed to create start clip")
             logging.info(f"DEBUG: Start clip created successfully")
             clips.append(start_clip)
+            logging.info(f"DEBUG: Start clip added to clips list. Total clips: {len(clips)}")
+            
+            # Add second page clip if enabled
+            if self.second_page_enabled_var.get():
+                self.root.after(0, lambda: self.status_label.config(text="Creating second page clip..."))
+                second_page_duration = self.second_page_duration_var.get()
+                logging.info(f"DEBUG: Creating second page clip with duration {second_page_duration}s")
+                second_page_clip = self.create_second_page_clip(duration=second_page_duration)
+                if second_page_clip is None:
+                    logging.warning("Failed to create second page clip, skipping...")
+                else:
+                    logging.info(f"DEBUG: Second page clip created successfully")
+                    clips.append(second_page_clip)
+                    logging.info(f"DEBUG: Second page clip added to clips list. Total clips: {len(clips)}")
             
             # Process postcard pairs in this batch
             for i in range(0, len(batch_indices), 2):
@@ -1813,32 +1895,71 @@ class PostcardVideoCreator:
                 # Create clips
                 logging.info(f"DEBUG: Creating front clip...")
                 front_clip = self.create_image_clip(front_path, front_duration)
+                logging.info(f"DEBUG: Front clip created with actual duration: {front_clip.duration}s")
                 if front_clip is None:
                     raise Exception(f"Failed to create front clip for: {front_path}")
+                
+                # NO FADE-IN for first image - let it show its full 4-second duration
+                # The 2.5-second second page fade-out provides the smooth transition
+                # if i == 0 and self.second_page_enabled_var.get():
+                #     # Transition handled by longer second page fade-out (2.5s)
+                
                 logging.info(f"DEBUG: Front clip created successfully")
                 
-                # If this is the first front clip and start fade-out is enabled, create manual transition
-                if i == 0 and self.start_fade_out_var.get():
-                    logging.info(f"DEBUG: Creating manual fade transition from start to first postcard")
-                    start_to_front = self.create_fade_transition(start_clip, front_clip)
-                    clips.extend([start_to_front, front_clip])
-                    logging.info(f"DEBUG: Manual transition created, clips now: {len(clips)}")
+                # Special handling for first front clip
+                if i == 0:
+                    if self.second_page_enabled_var.get() and len(clips) > 0:
+                        # Create crossfade from second page to first image
+                        logging.info(f"DEBUG: Creating crossfade from second page to first image")
+                        second_page_clip = clips[-1]  # Last clip should be the second page
+                        crossfade_clip = self.create_second_page_to_first_image_crossfade(
+                            second_page_clip, front_clip, crossfade_duration=1.0
+                        )
+                        # Replace the separate second page clip with the crossfade clip
+                        clips[-1] = crossfade_clip
+                        logging.info(f"DEBUG: Crossfade clip created and replaced second page. Total clips: {len(clips)}")
+                    elif self.start_fade_out_var.get() and not self.second_page_enabled_var.get():
+                        logging.info(f"DEBUG: Creating manual fade transition from start to first postcard")
+                        start_to_front = self.create_fade_transition(start_clip, front_clip)
+                        clips.append(start_to_front)  # Transition already includes the front clip at the end
+                        logging.info(f"DEBUG: Manual transition created (includes front clip), clips now: {len(clips)}")
+                    else:
+                        # Add front clip normally (no special transition)
+                        logging.info(f"DEBUG: Adding first front clip normally (no special transition)")
+                        clips.append(front_clip)
+                        logging.info(f"DEBUG: First front clip added. Total clips: {len(clips)}")
                 else:
-                    logging.info(f"DEBUG: No manual transition, adding front clip directly")
+                    # Add front clip normally for non-first images
+                    logging.info(f"DEBUG: Adding front clip normally")
                     clips.append(front_clip)
+                    logging.info(f"DEBUG: Front clip added. Total clips: {len(clips)}")
                     
                 logging.info(f"DEBUG: Creating back clip...")
                 back_clip = self.create_image_clip(back_path, back_duration)
+                logging.info(f"DEBUG: Back clip created with actual duration: {back_clip.duration}s")
                 if back_clip is None:
                     raise Exception(f"Failed to create back clip for: {back_path}")
                 logging.info(f"DEBUG: Back clip created successfully")
                 
                 # Add transition between front and back
                 if self.transition_duration > 0:
+                    # Check if we should remove the front clip - but NOT if we just created a crossfade
+                    crossfade_was_created = i == 0 and self.second_page_enabled_var.get() and len(clips) > 0
+                    manual_transition_was_created = i == 0 and self.start_fade_out_var.get() and not self.second_page_enabled_var.get()
+                    should_remove_front = len(clips) > 0 and not crossfade_was_created and not manual_transition_was_created
+                    if should_remove_front:
+                        clips.pop()  # Remove the standalone front clip
+                        logging.info(f"DEBUG: Removed standalone front clip before adding transition")
+                    elif crossfade_was_created:
+                        logging.info(f"DEBUG: Skipping front clip removal - crossfade already includes it")
+                    
                     transition = self.create_transition(front_clip, back_clip)
-                    clips.extend([transition, back_clip])
+                    logging.info(f"DEBUG: Transition clip created with duration: {transition.duration}s")
+                    clips.append(transition)  # Transition already includes both front and back clips
+                    logging.info(f"DEBUG: Added transition clip (includes both front and back)")
                 else:
                     clips.append(back_clip)
+                    logging.info(f"DEBUG: Added back clip directly (no transition)")
                 
                 # Add transition to next postcard (except for last one)
                 if i < len(batch_indices) - 2:
@@ -1861,6 +1982,16 @@ class PostcardVideoCreator:
             # Concatenate clips
             self.root.after(0, lambda: self.status_label.config(text="Concatenating clips..."))
             logging.info(f"DEBUG: About to concatenate {len(clips)} clips for batch video")
+            # Debug: Log each clip type and duration
+            for idx, clip in enumerate(clips):
+                clip_type = "unknown"
+                if hasattr(clip, 'filename') and clip.filename:
+                    clip_type = f"image: {os.path.basename(clip.filename)}"
+                elif hasattr(clip, 'make_frame'):
+                    clip_type = "custom/transition"
+                else:
+                    clip_type = "generated"
+                logging.info(f"DEBUG: Clip {idx}: {clip_type}, duration={getattr(clip, 'duration', 'unknown')}")
             final_video = concatenate_videoclips(clips, method="compose")
             logging.info(f"DEBUG: Clips concatenated successfully for batch video")
             
@@ -2106,15 +2237,29 @@ class PostcardVideoCreator:
             self.root.after(0, lambda: self.status_label.config(text="Creating start clip..."))
             start_duration = self.start_duration_var.get()
             # Don't apply fade-out to start clip if we're creating a manual transition
-            # Apply fade-out only if: fade-out enabled AND (no postcards OR manual transition disabled)
+            # Apply fade-out if: start_fade_out enabled OR second page enabled (for smooth transition)
             will_create_manual_transition = len(self.postcard_images) > 0 and self.start_fade_out_var.get()
-            apply_fade_out = self.start_fade_out_var.get() and not will_create_manual_transition
-            logging.debug(f"Fade logic - postcards: {len(self.postcard_images)}, fade_out_enabled: {self.start_fade_out_var.get()}")
+            second_page_enabled = self.second_page_enabled_var.get()
+            # Apply fade-out if: start_fade_out enabled OR second page enabled (for smooth transition)
+            apply_fade_out = (self.start_fade_out_var.get() and not will_create_manual_transition) or second_page_enabled
+            logging.debug(f"Fade logic - postcards: {len(self.postcard_images)}, fade_out_enabled: {self.start_fade_out_var.get()}, second_page_enabled: {second_page_enabled}")
             logging.debug(f"will_create_manual_transition: {will_create_manual_transition}, apply_fade_out: {apply_fade_out}")
             start_clip = self.create_start_clip(duration=start_duration, apply_fade_out=apply_fade_out)
             if start_clip is None:
                 raise Exception("Failed to create start clip")
             clips.append(start_clip)
+            
+            # Add second page clip if enabled
+            if self.second_page_enabled_var.get():
+                self.root.after(0, lambda: self.status_label.config(text="Creating second page clip..."))
+                second_page_duration = self.second_page_duration_var.get()
+                print(f"DEBUG: Creating second page clip with duration {second_page_duration}s")
+                second_page_clip = self.create_second_page_clip(duration=second_page_duration)
+                if second_page_clip is None:
+                    print("WARNING: Failed to create second page clip, skipping...")
+                else:
+                    print(f"DEBUG: Second page clip created successfully")
+                    clips.append(second_page_clip)
             
             # Calculate estimated time (rough estimate: 2 seconds per image)
             estimated_seconds = total_images * 2
@@ -2136,29 +2281,67 @@ class PostcardVideoCreator:
                 # Create front clip
                 print(f"DEBUG: Creating front clip for {front_path}")
                 front_clip = self.create_image_clip(front_path, front_duration)
+                print(f"DEBUG: Front clip created with actual duration: {front_clip.duration}s")
+                
+                # NO FADE-IN for first image - let it show its full 4-second duration
+                # The 2.5-second second page fade-out provides the smooth transition
+                # if i == 0 and self.second_page_enabled_var.get():
+                #     # Transition handled by longer second page fade-out (2.5s)
+                
                 print(f"DEBUG: Front clip created successfully")
 
-                # If requested, fade the start screen into the first front clip
-                if i == 0 and self.start_fade_out_var.get():
-                    logging.debug(f"Creating manual fade transition from start to first postcard")
-                    start_to_front = self.create_fade_transition(start_clip, front_clip)
-                    clips.extend([start_to_front, front_clip])
-                    logging.debug(f"Manual transition created, clips now: {len(clips)}")
+                # Special handling for first front clip
+                if i == 0:
+                    if self.second_page_enabled_var.get() and len(clips) > 0:
+                        # Create crossfade from second page to first image
+                        print(f"DEBUG: Creating crossfade from second page to first image")
+                        second_page_clip = clips[-1]  # Last clip should be the second page
+                        crossfade_clip = self.create_second_page_to_first_image_crossfade(
+                            second_page_clip, front_clip, crossfade_duration=1.0
+                        )
+                        # Replace the separate second page clip with the crossfade clip
+                        clips[-1] = crossfade_clip
+                        print(f"DEBUG: Crossfade clip created and replaced second page. Total clips: {len(clips)}")
+                    elif self.start_fade_out_var.get() and not self.second_page_enabled_var.get():
+                        logging.debug(f"Creating manual fade transition from start to first postcard")
+                        start_to_front = self.create_fade_transition(start_clip, front_clip)
+                        clips.append(start_to_front)  # Transition already includes the front clip at the end
+                        logging.debug(f"Manual transition created (includes front clip), clips now: {len(clips)}")
+                    else:
+                        # Add front clip normally (no special transition)
+                        print(f"DEBUG: Adding first front clip normally (no special transition)")
+                        clips.append(front_clip)
+                        print(f"DEBUG: First front clip added. Total clips: {len(clips)}")
                 else:
-                    logging.debug(f"No manual transition, adding front clip directly")
+                    # Add front clip normally for non-first images
+                    logging.debug(f"Adding front clip normally")
                     clips.append(front_clip)
                 
                 # Create back clip
                 print(f"DEBUG: Creating back clip for {back_path}")
                 back_clip = self.create_image_clip(back_path, back_duration)
+                print(f"DEBUG: Back clip created with actual duration: {back_clip.duration}s")
                 print(f"DEBUG: Back clip created successfully")
                 
                 # Add transition between front and back
                 if self.transition_duration > 0:
+                    # Check if we should remove the front clip - but NOT if we just created a crossfade
+                    crossfade_was_created = i == 0 and self.second_page_enabled_var.get() and len(clips) > 0
+                    manual_transition_was_created = i == 0 and self.start_fade_out_var.get() and not self.second_page_enabled_var.get()
+                    should_remove_front = len(clips) > 0 and not crossfade_was_created and not manual_transition_was_created
+                    if should_remove_front:
+                        clips.pop()  # Remove the standalone front clip
+                        print(f"DEBUG: Removed standalone front clip before adding transition")
+                    elif crossfade_was_created:
+                        print(f"DEBUG: Skipping front clip removal - crossfade already includes it")
+                    
                     transition = self.create_transition(front_clip, back_clip)
-                    clips.extend([transition, back_clip])
+                    print(f"DEBUG: Transition clip created with duration: {transition.duration}s")
+                    clips.append(transition)  # Transition already includes both front and back clips
+                    print(f"DEBUG: Added transition clip (includes both front and back)")
                 else:
                     clips.append(back_clip)
+                    print(f"DEBUG: Added back clip directly (no transition)")
                 
                 # Add transition to next postcard (except for last one)
                 if i < total_images - 2:
@@ -2503,13 +2686,13 @@ class PostcardVideoCreator:
         logging.debug(f"Creating fade transition: clip1 duration={clip1.duration}, transition duration={self.transition_duration}")
         
         def make_frame(t):
-            if t < clip1.duration - self.transition_duration:
-                # Show first clip normally (before transition starts)
+            if t < clip1.duration:
+                # Show first clip normally for its full duration
                 return clip1.get_frame(t)
-            elif t < clip1.duration:
+            elif t < clip1.duration + self.transition_duration:
                 # Transition period: fade from clip1 to clip2
-                transition_progress = (t - (clip1.duration - self.transition_duration)) / self.transition_duration
-                frame1 = clip1.get_frame(t)
+                transition_progress = (t - clip1.duration) / self.transition_duration
+                frame1 = clip1.get_frame(min(clip1.duration - 0.001, clip1.duration - 1/30))  # Last frame of clip1 (safer)
                 frame2 = clip2.get_frame(0)  # Start of second clip
                 
                 # Ensure frames are the right type and shape
@@ -2529,12 +2712,57 @@ class PostcardVideoCreator:
                 return blended_frame.astype('uint8')
             else:
                 # After transition: show second clip
-                return clip2.get_frame(t - clip1.duration)
+                return clip2.get_frame(t - clip1.duration - self.transition_duration)
         
-        # Transition clip duration is just the first clip duration (transition happens within it)
-        transition_clip = VideoClip(make_frame, duration=clip1.duration)
-        logging.debug(f"Fade transition created with duration={transition_clip.duration}")
+        # Transition clip duration: full front clip + transition + full back clip
+        transition_clip = VideoClip(make_frame, duration=clip1.duration + self.transition_duration + clip2.duration)
+        logging.debug(f"Fade transition created with duration={transition_clip.duration}s (front: {clip1.duration}s + transition: {self.transition_duration}s + back: {clip2.duration}s)")
+        logging.debug(f"Front clip will show normally from 0s to {clip1.duration}s, then transition from {clip1.duration}s to {clip1.duration + self.transition_duration}s")
         return transition_clip
+
+    def create_second_page_to_first_image_crossfade(self, second_page_clip, first_image_clip, crossfade_duration=1.0):
+        """Create a crossfade transition from second page directly to first image"""
+        logging.info(f"Creating crossfade transition: second page to first image (duration: {crossfade_duration}s)")
+        
+        # Calculate timing
+        second_page_duration = second_page_clip.duration
+        first_image_duration = first_image_clip.duration
+        crossfade_start_time = second_page_duration - crossfade_duration
+        
+        # Total duration: second page duration + first image duration - crossfade overlap
+        total_duration = second_page_duration + first_image_duration - crossfade_duration
+        
+        def make_frame(t):
+            if t < crossfade_start_time:
+                # Phase 1: Show second page normally (before crossfade)
+                return second_page_clip.get_frame(t)
+            elif t < second_page_duration:
+                # Phase 2: Crossfade period - blend second page with first image
+                crossfade_progress = (t - crossfade_start_time) / crossfade_duration
+                
+                # Get frames from both clips
+                second_page_frame = second_page_clip.get_frame(t)
+                first_image_time = crossfade_progress * crossfade_duration  # Start from beginning of first image
+                first_image_frame = first_image_clip.get_frame(first_image_time)
+                
+                # Ensure frames are the right type and shape
+                second_page_frame = np.array(second_page_frame, dtype=np.float32)
+                first_image_frame = np.array(first_image_frame, dtype=np.float32)
+                
+                # Blend the frames (fade from second page to first image)
+                alpha = crossfade_progress  # 0 = all second page, 1 = all first image
+                blended_frame = (1 - alpha) * second_page_frame + alpha * first_image_frame
+                return blended_frame.astype('uint8')
+            else:
+                # Phase 3: Show first image for remainder of its duration
+                first_image_time = t - crossfade_start_time  # Continue from where crossfade left off
+                first_image_time = min(first_image_time, first_image_duration - 0.01)
+                return first_image_clip.get_frame(first_image_time)
+        
+        crossfade_clip = VideoClip(make_frame, duration=total_duration)
+        logging.info(f"Crossfade clip created with duration: {total_duration}s (second page: {second_page_duration}s + first image: {first_image_duration}s - overlap: {crossfade_duration}s)")
+        
+        return crossfade_clip
     
     def create_slide_transition(self, clip1, clip2, direction="left"):
         """Create a slide transition"""
@@ -3311,6 +3539,158 @@ class PostcardVideoCreator:
             import traceback
             print(f"TRACEBACK: {traceback.format_exc()}")
             return None
+    
+    def create_second_page_clip(self, duration=3):
+        """Create a second page clip with configurable text and styling"""
+        def make_frame(t):
+            import numpy as np
+            import cv2
+            
+            # Create white background
+            frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 255
+            
+            # Get text content and settings
+            line1_text = self.second_page_line1_var.get()
+            line2_text = self.second_page_line2_var.get()
+            max_chars = self.second_page_max_chars_var.get()
+            
+            # Replace <br> with actual line breaks
+            line1_text = line1_text.replace('<br>', '\n')
+            line2_text = line2_text.replace('<br>', '\n')
+            
+            # Wrap text lines
+            line1_wrapped = self._wrap_text(line1_text, max_chars)
+            line2_wrapped = self._wrap_text(line2_text, max_chars)
+            
+            # Get styling settings
+            line1_size = self.second_page_line1_size_var.get()
+            line2_size = self.second_page_line2_size_var.get()
+            line1_y = self.second_page_line1_y_var.get()
+            line2_y = self.second_page_line2_y_var.get()
+            
+            line1_bold = self.second_page_line1_bold_var.get()
+            line2_bold = self.second_page_line2_bold_var.get()
+            line1_italic = self.second_page_line1_italic_var.get()
+            line2_italic = self.second_page_line2_italic_var.get()
+            
+            # Convert colors from hex to RGB
+            def hex_to_rgb(hex_color):
+                try:
+                    hex_color = hex_color.lstrip('#')
+                    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+                except:
+                    return (0, 0, 0)  # Default to black
+            
+            line1_color = hex_to_rgb(self.second_page_line1_color_var.get())
+            line2_color = hex_to_rgb(self.second_page_line2_color_var.get())
+            
+            # Calculate font scale for video size
+            scale_factor = self.video_width / 1080  # Assuming base size of 1080
+            font1_scale = (line1_size / 72.0) * scale_factor  # Convert point size to scale
+            font2_scale = (line2_size / 72.0) * scale_factor
+            
+            # OpenCV font and thickness
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            
+            # Set thickness based on bold settings
+            thickness1 = 6 if line1_bold else 2
+            thickness2 = 6 if line2_bold else 2
+            
+            # For bold text, use a bolder font variant
+            font1 = cv2.FONT_HERSHEY_DUPLEX if line1_bold else cv2.FONT_HERSHEY_SIMPLEX
+            font2 = cv2.FONT_HERSHEY_DUPLEX if line2_bold else cv2.FONT_HERSHEY_SIMPLEX
+            
+            # Note: OpenCV doesn't have true italic support, but we handle the flag for completeness
+            
+            # Draw line 1 (with wrapping)
+            current_y = line1_y
+            for wrapped_line in line1_wrapped:
+                if wrapped_line.strip():  # Only draw non-empty lines
+                    # Get text size for centering
+                    (text_width, text_height), baseline = cv2.getTextSize(wrapped_line, font1, font1_scale, thickness1)
+                    text_x = (self.video_width - text_width) // 2
+                    
+                    # Adjust for OpenCV text baseline
+                    text_y = current_y + text_height
+                    
+                    # For bold text, use multiple render technique for extra thickness
+                    if line1_bold:
+                        # Render multiple times with slight offsets for bolder effect
+                        for dx in [-1, 0, 1]:
+                            for dy in [-1, 0, 1]:
+                                cv2.putText(frame, wrapped_line, (text_x + dx, text_y + dy),
+                                          font1, font1_scale, line1_color, thickness1, cv2.LINE_AA)
+                    else:
+                        cv2.putText(frame, wrapped_line, (text_x, text_y),
+                                  font1, font1_scale, line1_color, thickness1, cv2.LINE_AA)
+                
+                current_y += int(text_height) + 10  # Add some spacing between wrapped lines
+            
+            # Draw line 2 (with wrapping)
+            current_y = line2_y
+            for wrapped_line in line2_wrapped:
+                if wrapped_line.strip():  # Only draw non-empty lines
+                    # Get text size for centering
+                    (text_width, text_height), baseline = cv2.getTextSize(wrapped_line, font2, font2_scale, thickness2)
+                    text_x = (self.video_width - text_width) // 2
+                    
+                    # Adjust for OpenCV text baseline
+                    text_y = current_y + text_height
+                    
+                    # For bold text, use multiple render technique for extra thickness
+                    if line2_bold:
+                        # Render multiple times with slight offsets for bolder effect
+                        for dx in [-1, 0, 1]:
+                            for dy in [-1, 0, 1]:
+                                cv2.putText(frame, wrapped_line, (text_x + dx, text_y + dy),
+                                          font2, font2_scale, line2_color, thickness2, cv2.LINE_AA)
+                    else:
+                        cv2.putText(frame, wrapped_line, (text_x, text_y),
+                                  font2, font2_scale, line2_color, thickness2, cv2.LINE_AA)
+                
+                current_y += int(text_height) + 10  # Add some spacing between wrapped lines
+            
+            return frame
+        
+        try:
+            logging.info("DEBUG: Creating second page clip...")
+            logging.info(f"DEBUG: Duration: {duration}")
+            logging.info(f"DEBUG: Video dimensions: {self.video_width}x{self.video_height}")
+            
+            if VideoClip is None:
+                print("ERROR: VideoClip is None - MoviePy not properly imported")
+                return None
+            
+            second_clip = VideoClip(make_frame, duration=duration)
+            if second_clip is None:
+                print("ERROR: Second page VideoClip returned None")
+                return None
+            
+            logging.info("DEBUG: Second page clip created successfully")
+            
+            # Apply fade effects if enabled
+            if self.second_page_fade_in_var.get():
+                try:
+                    second_clip = vfx_fadein(second_clip, self.second_page_fade_in_dur_var.get())
+                    logging.info("DEBUG: Applied fade in effect to second page clip")
+                except Exception as e:
+                    print(f"WARNING: Failed to apply fade in effect to second page: {e}")
+            
+            if self.second_page_fade_out_var.get():
+                try:
+                    fade_out_duration = self.second_page_fade_out_dur_var.get()
+                    second_clip = vfx_fadeout(second_clip, fade_out_duration)
+                    logging.info(f"DEBUG: Applied fade out effect ({fade_out_duration}s) to second page clip")
+                except Exception as e:
+                    print(f"WARNING: Failed to apply fade out effect to second page: {e}")
+            
+            return second_clip
+            
+        except Exception as e:
+            print(f"ERROR: Failed to create second page clip: {e}")
+            import traceback
+            print(f"TRACEBACK: {traceback.format_exc()}")
+            return None
             
     def show_success_message(self, output_path, minutes, seconds):
         time_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
@@ -3551,6 +3931,26 @@ class PostcardVideoCreator:
                 "ending_image_path": self.ending_image_path_var.get(),
                 "ending_image_height": self.ending_image_height_var.get(),
                 "ending_image_spacing": self.ending_image_spacing_var.get(),
+                # Second page settings
+                "second_page_enabled": self.second_page_enabled_var.get(),
+                "second_page_line1": self.second_page_line1_var.get(),
+                "second_page_line2": self.second_page_line2_var.get(),
+                "second_page_line1_bold": self.second_page_line1_bold_var.get(),
+                "second_page_line2_bold": self.second_page_line2_bold_var.get(),
+                "second_page_line1_italic": self.second_page_line1_italic_var.get(),
+                "second_page_line2_italic": self.second_page_line2_italic_var.get(),
+                "second_page_line1_size": self.second_page_line1_size_var.get(),
+                "second_page_line2_size": self.second_page_line2_size_var.get(),
+                "second_page_line1_y": self.second_page_line1_y_var.get(),
+                "second_page_line2_y": self.second_page_line2_y_var.get(),
+                "second_page_max_chars": self.second_page_max_chars_var.get(),
+                "second_page_duration": self.second_page_duration_var.get(),
+                "second_page_line1_color": self.second_page_line1_color_var.get(),
+                "second_page_line2_color": self.second_page_line2_color_var.get(),
+                "second_page_fade_in": self.second_page_fade_in_var.get(),
+                "second_page_fade_out": self.second_page_fade_out_var.get(),
+                "second_page_fade_in_dur": self.second_page_fade_in_dur_var.get(),
+                "second_page_fade_out_dur": self.second_page_fade_out_dur_var.get(),
                 # Fade options
                 "start_fade_in": self.start_fade_in_var.get(),
                 "start_fade_out": self.start_fade_out_var.get(),
@@ -3798,6 +4198,265 @@ class PostcardVideoCreator:
         
         # Initial preview
         self.update_ending_preview()
+    
+    def open_second_page_config(self):
+        """Open second page configuration dialog"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Configure Second Page")
+        dialog.geometry("1000x720")
+        dialog.resizable(True, True)
+        
+        # Make dialog modal
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Main container with padding
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        dialog.grid_rowconfigure(0, weight=1)
+        dialog.grid_columnconfigure(0, weight=1)
+        main_frame.grid_rowconfigure(2, weight=1)
+        main_frame.grid_columnconfigure(1, weight=1)
+        
+        # Header
+        header_label = ttk.Label(main_frame, text="Second Page Configuration", 
+                               font=("TkDefaultFont", 14, "bold"))
+        header_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
+        
+        # Controls frame (left side)
+        controls_frame = ttk.Frame(main_frame)
+        controls_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 20))
+        
+        # Second page enabled checkbox
+        enabled_frame = ttk.LabelFrame(controls_frame, text="Second Page Settings", padding="10")
+        enabled_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        ttk.Checkbutton(enabled_frame, text="Enable Second Page", 
+                       variable=self.second_page_enabled_var,
+                       command=self.update_second_page_preview).grid(row=0, column=0, sticky=tk.W)
+        
+        # Duration setting
+        ttk.Label(enabled_frame, text="Duration (seconds):").grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
+        ttk.Spinbox(enabled_frame, from_=1.0, to=10.0, increment=0.5, 
+                   textvariable=self.second_page_duration_var, width=8,
+                   command=self.update_second_page_preview).grid(row=1, column=1, sticky=tk.W, pady=(10, 0), padx=(5, 0))
+        
+        # Text wrapping setting
+        ttk.Label(enabled_frame, text="Max characters per line:").grid(row=2, column=0, sticky=tk.W, pady=(10, 0))
+        ttk.Spinbox(enabled_frame, from_=10, to=100, increment=5, 
+                   textvariable=self.second_page_max_chars_var, width=8,
+                   command=self.update_second_page_preview).grid(row=2, column=1, sticky=tk.W, pady=(10, 0), padx=(5, 0))
+        
+        # Fade effects frame
+        fade_frame = ttk.LabelFrame(controls_frame, text="Fade Effects", padding="10")
+        fade_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
+        
+        # Fade In
+        fade_in_frame = ttk.Frame(fade_frame)
+        fade_in_frame.grid(row=0, column=0, columnspan=4, sticky=(tk.W, tk.E), pady=(0, 5))
+        
+        ttk.Checkbutton(fade_in_frame, text="Fade In", variable=self.second_page_fade_in_var,
+                       command=self.update_second_page_preview).grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(fade_in_frame, text="Duration:").grid(row=0, column=1, sticky=tk.W, padx=(20, 0))
+        ttk.Spinbox(fade_in_frame, from_=0.1, to=5.0, increment=0.1, 
+                   textvariable=self.second_page_fade_in_dur_var, width=6,
+                   command=self.update_second_page_preview).grid(row=0, column=2, sticky=tk.W, padx=(5, 0))
+        ttk.Label(fade_in_frame, text="seconds").grid(row=0, column=3, sticky=tk.W, padx=(5, 0))
+        
+        # Fade Out
+        fade_out_frame = ttk.Frame(fade_frame)
+        fade_out_frame.grid(row=1, column=0, columnspan=4, sticky=(tk.W, tk.E), pady=(5, 0))
+        
+        ttk.Checkbutton(fade_out_frame, text="Fade Out", variable=self.second_page_fade_out_var,
+                       command=self.update_second_page_preview).grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(fade_out_frame, text="Duration:").grid(row=0, column=1, sticky=tk.W, padx=(20, 0))
+        ttk.Spinbox(fade_out_frame, from_=0.1, to=5.0, increment=0.1, 
+                   textvariable=self.second_page_fade_out_dur_var, width=6,
+                   command=self.update_second_page_preview).grid(row=0, column=2, sticky=tk.W, padx=(5, 0))
+        ttk.Label(fade_out_frame, text="seconds").grid(row=0, column=3, sticky=tk.W, padx=(5, 0))
+        
+        # Line 1 configuration
+        line1_frame = ttk.LabelFrame(controls_frame, text="Line 1", padding="10")
+        line1_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        ttk.Label(line1_frame, text="Text:").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(line1_frame, textvariable=self.second_page_line1_var, width=40).grid(row=0, column=1, columnspan=3, sticky=(tk.W, tk.E), padx=(5, 0))
+        
+        ttk.Label(line1_frame, text="Font Size:").grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
+        ttk.Spinbox(line1_frame, from_=20, to=120, increment=5, 
+                   textvariable=self.second_page_line1_size_var, width=8,
+                   command=self.update_second_page_preview).grid(row=1, column=1, sticky=tk.W, pady=(10, 0), padx=(5, 0))
+        
+        ttk.Label(line1_frame, text="Y Position:").grid(row=1, column=2, sticky=tk.W, pady=(10, 0), padx=(20, 0))
+        ttk.Spinbox(line1_frame, from_=50, to=1000, increment=10, 
+                   textvariable=self.second_page_line1_y_var, width=8,
+                   command=self.update_second_page_preview).grid(row=1, column=3, sticky=tk.W, pady=(10, 0), padx=(5, 0))
+        
+        # Style options for line 1
+        style1_frame = ttk.Frame(line1_frame)
+        style1_frame.grid(row=2, column=0, columnspan=4, sticky=(tk.W, tk.E), pady=(10, 0))
+        
+        ttk.Checkbutton(style1_frame, text="Bold", variable=self.second_page_line1_bold_var,
+                       command=self.update_second_page_preview).grid(row=0, column=0, sticky=tk.W)
+        ttk.Checkbutton(style1_frame, text="Italic", variable=self.second_page_line1_italic_var,
+                       command=self.update_second_page_preview).grid(row=0, column=1, sticky=tk.W, padx=(20, 0))
+        
+        # Color picker for line 1
+        ttk.Label(style1_frame, text="Color:").grid(row=0, column=2, sticky=tk.W, padx=(20, 0))
+        color1_button = tk.Button(style1_frame, text="  ", width=3, height=1,
+                                 bg=self.second_page_line1_color_var.get(),
+                                 command=lambda: self._choose_color(self.second_page_line1_color_var, color1_button))
+        color1_button.grid(row=0, column=3, sticky=tk.W, padx=(5, 0))
+        
+        # Line 2 configuration
+        line2_frame = ttk.LabelFrame(controls_frame, text="Line 2", padding="10")
+        line2_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        ttk.Label(line2_frame, text="Text:").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(line2_frame, textvariable=self.second_page_line2_var, width=40).grid(row=0, column=1, columnspan=3, sticky=(tk.W, tk.E), padx=(5, 0))
+        
+        ttk.Label(line2_frame, text="Font Size:").grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
+        ttk.Spinbox(line2_frame, from_=20, to=120, increment=5, 
+                   textvariable=self.second_page_line2_size_var, width=8,
+                   command=self.update_second_page_preview).grid(row=1, column=1, sticky=tk.W, pady=(10, 0), padx=(5, 0))
+        
+        ttk.Label(line2_frame, text="Y Position:").grid(row=1, column=2, sticky=tk.W, pady=(10, 0), padx=(20, 0))
+        ttk.Spinbox(line2_frame, from_=50, to=1000, increment=10, 
+                   textvariable=self.second_page_line2_y_var, width=8,
+                   command=self.update_second_page_preview).grid(row=1, column=3, sticky=tk.W, pady=(10, 0), padx=(5, 0))
+        
+        # Style options for line 2
+        style2_frame = ttk.Frame(line2_frame)
+        style2_frame.grid(row=2, column=0, columnspan=4, sticky=(tk.W, tk.E), pady=(10, 0))
+        
+        ttk.Checkbutton(style2_frame, text="Bold", variable=self.second_page_line2_bold_var,
+                       command=self.update_second_page_preview).grid(row=0, column=0, sticky=tk.W)
+        ttk.Checkbutton(style2_frame, text="Italic", variable=self.second_page_line2_italic_var,
+                       command=self.update_second_page_preview).grid(row=0, column=1, sticky=tk.W, padx=(20, 0))
+        
+        # Color picker for line 2
+        ttk.Label(style2_frame, text="Color:").grid(row=0, column=2, sticky=tk.W, padx=(20, 0))
+        color2_button = tk.Button(style2_frame, text="  ", width=3, height=1,
+                                 bg=self.second_page_line2_color_var.get(),
+                                 command=lambda: self._choose_color(self.second_page_line2_color_var, color2_button))
+        color2_button.grid(row=0, column=3, sticky=tk.W, padx=(5, 0))
+        
+        # Preview frame (right side)
+        preview_frame = ttk.LabelFrame(main_frame, text="Preview", padding="10")
+        preview_frame.grid(row=1, column=1, rowspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Preview canvas
+        self.second_page_preview_canvas = tk.Canvas(preview_frame, width=400, height=400, bg='white')
+        self.second_page_preview_canvas.grid(row=0, column=0, padx=(0, 10))
+        
+        # Button frame at bottom
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=3, column=0, columnspan=2, pady=(20, 0))
+        
+        # Buttons
+        ttk.Button(button_frame, text="Save & Close", 
+                  command=lambda: self.save_second_page_defaults_and_close(dialog)).grid(row=0, column=0, padx=(0, 10))
+        ttk.Button(button_frame, text="Cancel", command=dialog.destroy).grid(row=0, column=1)
+        
+        # Configure grid weights
+        line1_frame.grid_columnconfigure(1, weight=1)
+        line2_frame.grid_columnconfigure(1, weight=1)
+        
+        # Bind text change events
+        self.second_page_line1_var.trace('w', lambda *args: self.update_second_page_preview())
+        self.second_page_line2_var.trace('w', lambda *args: self.update_second_page_preview())
+        
+        # Initial preview
+        self.update_second_page_preview()
+    
+    def _choose_color(self, color_var, button):
+        """Choose a color and update the variable and button"""
+        try:
+            from tkinter import colorchooser
+            color = colorchooser.askcolor(color=color_var.get())
+            if color[1]:  # color[1] is the hex string
+                color_var.set(color[1])
+                button.config(bg=color[1])
+                self.update_second_page_preview()
+        except Exception as e:
+            print(f"Color chooser error: {e}")
+    
+    def update_second_page_preview(self):
+        """Update the second page preview"""
+        if not hasattr(self, 'second_page_preview_canvas'):
+            return
+            
+        try:
+            canvas = self.second_page_preview_canvas
+            canvas.delete("all")
+            
+            if not self.second_page_enabled_var.get():
+                canvas.create_text(200, 200, text="Second page disabled", 
+                                 font=("Arial", 14), fill="gray")
+                return
+            
+            # Canvas dimensions
+            canvas_width = 400
+            canvas_height = 400
+            
+            # Get text content and wrap if needed
+            max_chars = self.second_page_max_chars_var.get()
+            line1_text = self.second_page_line1_var.get()
+            line2_text = self.second_page_line2_var.get()
+            
+            # Replace <br> with actual line breaks
+            line1_text = line1_text.replace('<br>', '\n')
+            line2_text = line2_text.replace('<br>', '\n')
+            
+            # Wrap the text
+            line1_wrapped = self._wrap_text(line1_text, max_chars)
+            line2_wrapped = self._wrap_text(line2_text, max_chars)
+            
+            # Get styling info
+            line1_size = max(8, self.second_page_line1_size_var.get() // 3)  # Scale for preview
+            line2_size = max(8, self.second_page_line2_size_var.get() // 3)  # Scale for preview
+            line1_y = self.second_page_line1_y_var.get() // 3  # Scale for preview
+            line2_y = self.second_page_line2_y_var.get() // 3  # Scale for preview
+            
+            # Font styles
+            line1_weight = "bold" if self.second_page_line1_bold_var.get() else "normal"
+            line1_slant = "italic" if self.second_page_line1_italic_var.get() else "roman"
+            line2_weight = "bold" if self.second_page_line2_bold_var.get() else "normal"
+            line2_slant = "italic" if self.second_page_line2_italic_var.get() else "roman"
+            
+            # Colors
+            line1_color = self.second_page_line1_color_var.get()
+            line2_color = self.second_page_line2_color_var.get()
+            
+            # Draw line 1 (with wrapping)
+            current_y = line1_y
+            for wrapped_line in line1_wrapped:
+                if wrapped_line.strip():  # Only draw non-empty lines
+                    canvas.create_text(canvas_width // 2, current_y, text=wrapped_line,
+                                     font=("Arial", line1_size, line1_weight, line1_slant),
+                                     fill=line1_color, anchor="center")
+                current_y += line1_size + 5  # Add some spacing between wrapped lines
+            
+            # Draw line 2 (with wrapping)
+            current_y = line2_y
+            for wrapped_line in line2_wrapped:
+                if wrapped_line.strip():  # Only draw non-empty lines
+                    canvas.create_text(canvas_width // 2, current_y, text=wrapped_line,
+                                     font=("Arial", line2_size, line2_weight, line2_slant),
+                                     fill=line2_color, anchor="center")
+                current_y += line2_size + 5  # Add some spacing between wrapped lines
+            
+        except Exception as e:
+            print(f"Preview update error: {e}")
+    
+    def save_second_page_defaults_and_close(self, dialog):
+        """Save second page defaults and close dialog"""
+        try:
+            self.save_defaults()
+            dialog.destroy()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save settings: {str(e)}")
     
     def open_start_config(self):
         """Open start text configuration dialog"""
@@ -4584,6 +5243,26 @@ class PostcardVideoCreator:
                 "ending_image_path": self.ending_image_path_var.get(),
                 "ending_image_height": self.ending_image_height_var.get(),
                 "ending_image_spacing": self.ending_image_spacing_var.get(),
+                # Second page settings
+                "second_page_enabled": self.second_page_enabled_var.get(),
+                "second_page_line1": self.second_page_line1_var.get(),
+                "second_page_line2": self.second_page_line2_var.get(),
+                "second_page_line1_bold": self.second_page_line1_bold_var.get(),
+                "second_page_line2_bold": self.second_page_line2_bold_var.get(),
+                "second_page_line1_italic": self.second_page_line1_italic_var.get(),
+                "second_page_line2_italic": self.second_page_line2_italic_var.get(),
+                "second_page_line1_size": self.second_page_line1_size_var.get(),
+                "second_page_line2_size": self.second_page_line2_size_var.get(),
+                "second_page_line1_y": self.second_page_line1_y_var.get(),
+                "second_page_line2_y": self.second_page_line2_y_var.get(),
+                "second_page_max_chars": self.second_page_max_chars_var.get(),
+                "second_page_duration": self.second_page_duration_var.get(),
+                "second_page_line1_color": self.second_page_line1_color_var.get(),
+                "second_page_line2_color": self.second_page_line2_color_var.get(),
+                "second_page_fade_in": self.second_page_fade_in_var.get(),
+                "second_page_fade_out": self.second_page_fade_out_var.get(),
+                "second_page_fade_in_dur": self.second_page_fade_in_dur_var.get(),
+                "second_page_fade_out_dur": self.second_page_fade_out_dur_var.get(),
                 # Fade options
                 "start_fade_in": self.start_fade_in_var.get(),
                 "start_fade_out": self.start_fade_out_var.get(),
@@ -4679,6 +5358,26 @@ class PostcardVideoCreator:
                 self.ending_image_path_var.set(defaults.get("ending_image_path", ""))
                 self.ending_image_height_var.set(defaults.get("ending_image_height", 200))
                 self.ending_image_spacing_var.set(defaults.get("ending_image_spacing", 20))
+                # Second page settings
+                self.second_page_enabled_var.set(defaults.get("second_page_enabled", False))
+                self.second_page_line1_var.set(defaults.get("second_page_line1", "Welcome to our collection"))
+                self.second_page_line2_var.set(defaults.get("second_page_line2", "Discover amazing postcards"))
+                self.second_page_line1_bold_var.set(defaults.get("second_page_line1_bold", False))
+                self.second_page_line2_bold_var.set(defaults.get("second_page_line2_bold", False))
+                self.second_page_line1_italic_var.set(defaults.get("second_page_line1_italic", False))
+                self.second_page_line2_italic_var.set(defaults.get("second_page_line2_italic", False))
+                self.second_page_line1_size_var.set(defaults.get("second_page_line1_size", 60))
+                self.second_page_line2_size_var.set(defaults.get("second_page_line2_size", 50))
+                self.second_page_line1_y_var.set(defaults.get("second_page_line1_y", 450))
+                self.second_page_line2_y_var.set(defaults.get("second_page_line2_y", 580))
+                self.second_page_max_chars_var.set(defaults.get("second_page_max_chars", 30))
+                self.second_page_duration_var.set(defaults.get("second_page_duration", 3.0))
+                self.second_page_line1_color_var.set(defaults.get("second_page_line1_color", "#000000"))
+                self.second_page_line2_color_var.set(defaults.get("second_page_line2_color", "#000000"))
+                self.second_page_fade_in_var.set(defaults.get("second_page_fade_in", False))
+                self.second_page_fade_out_var.set(defaults.get("second_page_fade_out", False))
+                self.second_page_fade_in_dur_var.set(defaults.get("second_page_fade_in_dur", 0.5))
+                self.second_page_fade_out_dur_var.set(defaults.get("second_page_fade_out_dur", 0.5))
                 self.ending_fade_in_var.set(defaults.get("ending_fade_in", False))
                 self.ending_fade_out_var.set(defaults.get("ending_fade_out", False))
                 self.ending_fade_in_dur_var.set(defaults.get("ending_fade_in_dur", 0.5))
