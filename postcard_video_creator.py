@@ -274,6 +274,10 @@ class PostcardVideoCreator:
         preview_button = ttk.Button(settings_frame, text="🎵 Preview", command=self.preview_music)
         preview_button.grid(row=2, column=4, sticky=tk.W, pady=(10, 0), padx=(10, 0))
         
+        # Music management button
+        music_manage_button = ttk.Button(settings_frame, text="🎼 Manage Music", command=self.open_music_manager)
+        music_manage_button.grid(row=2, column=5, sticky=tk.W, pady=(10, 0), padx=(10, 0))
+        
         # Background color for square format
         ttk.Label(settings_frame, text="Square Background:").grid(row=3, column=0, sticky=tk.W, pady=(10, 0))
         background_color_combo = ttk.Combobox(settings_frame, textvariable=self.background_color_var,
@@ -1197,8 +1201,34 @@ class PostcardVideoCreator:
     def _get_random_music(self):
         """Get a random music track from available options"""
         import random
-        available_music = ["Vintage Memories", "Nostalgic Journey", "Classic Charm", "Peaceful Moments"]
-        return random.choice(available_music)
+        music_files = self.get_music_files()
+        if music_files:
+            return random.choice(music_files)['display_name']
+        else:
+            # Fallback to default tracks if no custom music found
+            available_music = ["Vintage Memories", "Nostalgic Journey", "Classic Charm", "Peaceful Moments"]
+            return random.choice(available_music)
+    
+    def _get_music_path_by_name(self, display_name):
+        """Get the file path for a music track by its display name"""
+        # First check custom music files
+        music_files = self.get_music_files()
+        for music_file in music_files:
+            if music_file['display_name'] == display_name:
+                return music_file['path']
+        
+        # Fallback to legacy hardcoded music files
+        music_filename_wav = display_name.replace(' ', '_').lower() + '.wav'
+        music_filename_mp3 = display_name.replace(' ', '_').lower() + '.mp3'
+        music_path_wav = os.path.join('music', music_filename_wav)
+        music_path_mp3 = os.path.join('music', music_filename_mp3)
+        
+        if os.path.exists(music_path_mp3):
+            return music_path_mp3
+        elif os.path.exists(music_path_wav):
+            return music_path_wav
+        
+        return None
     
     def process_videos_in_batches(self, batches):
         """Process multiple videos based on the calculated batches"""
@@ -1408,17 +1438,10 @@ class PostcardVideoCreator:
                 else:
                     selected_music = self.music_var.get()
                 
-                music_filename_wav = selected_music.replace(' ', '_').lower() + '.wav'
-                music_filename_mp3 = selected_music.replace(' ', '_').lower() + '.mp3'
-                music_path_wav = os.path.join('music', music_filename_wav)
-                music_path_mp3 = os.path.join('music', music_filename_mp3)
+                # Find music file by display name
+                music_path = self._get_music_path_by_name(selected_music)
                 
-                # Check which file exists
-                if os.path.exists(music_path_mp3):
-                    music_path = music_path_mp3
-                    self.root.after(0, lambda: self.status_label.config(text="Adding background music..."))
-                elif os.path.exists(music_path_wav):
-                    music_path = music_path_wav
+                if music_path and os.path.exists(music_path):
                     self.root.after(0, lambda: self.status_label.config(text="Adding background music..."))
                 else:
                     music_path = None  # Music file not found
@@ -1486,12 +1509,16 @@ class PostcardVideoCreator:
                     video_duration = final_video.duration
                     fade_duration = min(3.0, video_duration * 0.3)  # 3 seconds or 30% of video, whichever is shorter
                     
+                    # Use -stream_loop -1 to loop music indefinitely until video ends
+                    # This prevents music from ending before the video is complete
+                    
                     cmd = [
                         'ffmpeg', '-y',
                         '-i', temp_video_path,
-                        '-i', music_path,
+                        '-stream_loop', '-1', '-i', music_path,
                         '-c:v', 'copy',
                         '-c:a', 'aac',
+                        '-map', '0:v:0', '-map', '1:a:0',
                         '-shortest',
                         '-filter:a', f'volume={self.music_volume_var.get()},afade=t=out:st={video_duration-fade_duration}:d={fade_duration}',
                         output_path
@@ -1700,17 +1727,10 @@ class PostcardVideoCreator:
                 else:
                     selected_music = self.music_var.get()
                 
-                music_filename_wav = selected_music.replace(' ', '_').lower() + '.wav'
-                music_filename_mp3 = selected_music.replace(' ', '_').lower() + '.mp3'
-                music_path_wav = os.path.join('music', music_filename_wav)
-                music_path_mp3 = os.path.join('music', music_filename_mp3)
+                # Find music file by display name
+                music_path = self._get_music_path_by_name(selected_music)
                 
-                # Check which file exists
-                if os.path.exists(music_path_mp3):
-                    music_path = music_path_mp3
-                    self.root.after(0, lambda: self.status_label.config(text="Adding background music..."))
-                elif os.path.exists(music_path_wav):
-                    music_path = music_path_wav
+                if music_path and os.path.exists(music_path):
                     self.root.after(0, lambda: self.status_label.config(text="Adding background music..."))
                 else:
                     music_path = None  # Music file not found
@@ -1775,12 +1795,16 @@ class PostcardVideoCreator:
                     video_duration = final_video.duration
                     fade_duration = min(3.0, video_duration * 0.3)  # 3 seconds or 30% of video, whichever is shorter
                     
+                    # Use -stream_loop -1 to loop music indefinitely until video ends
+                    # This prevents music from ending before the video is complete
+                    
                     cmd = [
                         'ffmpeg', '-y',
                         '-i', temp_video_path,
-                        '-i', music_path,
+                        '-stream_loop', '-1', '-i', music_path,
                         '-c:v', 'copy',
                         '-c:a', 'aac',
+                        '-map', '0:v:0', '-map', '1:a:0',
                         '-shortest',
                         '-filter:a', f'volume={self.music_volume_var.get()},afade=t=out:st={video_duration-fade_duration}:d={fade_duration}',
                         output_path
@@ -3992,23 +4016,11 @@ class PostcardVideoCreator:
                 self.status_label.config(text="No music selected for preview")
                 return
             
-            # Find the music file (try both .mp3 and .wav)
-            music_filename_wav = selected_music.replace(' ', '_').lower() + '.wav'
-            music_filename_mp3 = selected_music.replace(' ', '_').lower() + '.mp3'
-            music_path_wav = os.path.join('music', music_filename_wav)
-            music_path_mp3 = os.path.join('music', music_filename_mp3)
+            # Find the music file using the new system
+            music_path = self._get_music_path_by_name(selected_music)
             
-            # Check which file exists
-            if os.path.exists(music_path_mp3):
-                music_path = music_path_mp3
-            elif os.path.exists(music_path_wav):
-                music_path = music_path_wav
-            else:
-                self.status_label.config(text=f"Music file not found: {music_filename_mp3} or {music_filename_wav}")
-                return
-            
-            if not os.path.exists(music_path):
-                self.status_label.config(text=f"Music file not found: {music_path}")
+            if not music_path or not os.path.exists(music_path):
+                self.status_label.config(text=f"Music file not found: {selected_music}")
                 return
             
             # Try to play the music using different methods
@@ -4054,6 +4066,529 @@ class PostcardVideoCreator:
         except Exception as e:
             self.status_label.config(text=f"❌ Preview failed: {str(e)}")
             print(f"Preview error: {e}")  # Debug output
+    
+    def open_music_manager(self):
+        """Open the music management dialog"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Music Library Manager")
+        dialog.geometry("900x600")
+        dialog.resizable(True, True)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (900 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (600 // 2)
+        dialog.geometry(f"900x600+{x}+{y}")
+        
+        # Main frame
+        main_frame = ttk.Frame(dialog, padding="16")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(1, weight=1)
+        
+        # Configure dialog grid
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(0, weight=1)
+        
+        # Title
+        title_label = ttk.Label(main_frame, text="Music Library Manager", 
+                               font=('Arial', 16, 'bold'))
+        title_label.grid(row=0, column=0, pady=(0, 20))
+        
+        # Buttons frame
+        buttons_frame = ttk.Frame(main_frame)
+        buttons_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        # Add Music button
+        add_button = ttk.Button(buttons_frame, text="📁 Add Music Files", 
+                               command=lambda: self.add_music_files(music_listbox, status_label))
+        add_button.grid(row=0, column=0, padx=(0, 10))
+        
+        # Rename button
+        rename_button = ttk.Button(buttons_frame, text="✏️ Rename Track", 
+                                  command=lambda: self.rename_music_track(music_listbox, status_label))
+        rename_button.grid(row=0, column=1, padx=(0, 10))
+        
+        # Delete button
+        delete_button = ttk.Button(buttons_frame, text="🗑️ Delete Track", 
+                                  command=lambda: self.delete_music_track(music_listbox, status_label))
+        delete_button.grid(row=0, column=2, padx=(0, 10))
+        
+        # Preview button
+        preview_button = ttk.Button(buttons_frame, text="🎵 Preview Track", 
+                                   command=lambda: self.preview_selected_track(music_listbox, status_label))
+        preview_button.grid(row=0, column=3, padx=(0, 10))
+        
+        # Stop preview button
+        stop_button = ttk.Button(buttons_frame, text="⏹️ Stop Preview", 
+                                command=lambda: self.stop_music_preview(status_label))
+        stop_button.grid(row=0, column=4, padx=(0, 10))
+        
+        # Refresh button
+        refresh_button = ttk.Button(buttons_frame, text="🔄 Refresh", 
+                                   command=lambda: self.refresh_music_list(music_listbox, status_label))
+        refresh_button.grid(row=0, column=5)
+        
+        # Music list frame
+        list_frame = ttk.LabelFrame(main_frame, text="Current Music Tracks", padding="10")
+        list_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        list_frame.columnconfigure(0, weight=1)
+        list_frame.rowconfigure(0, weight=1)
+        
+        # Listbox with scrollbar for music files
+        listbox_frame = ttk.Frame(list_frame)
+        listbox_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        listbox_frame.columnconfigure(0, weight=1)
+        listbox_frame.rowconfigure(0, weight=1)
+        
+        music_listbox = tk.Listbox(listbox_frame, font=('Arial', 10))
+        music_listbox.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        scrollbar = ttk.Scrollbar(listbox_frame, orient=tk.VERTICAL, command=music_listbox.yview)
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        music_listbox.configure(yscrollcommand=scrollbar.set)
+        
+        # Info label
+        info_label = ttk.Label(main_frame, text="Supported formats: MP3, WAV, OGG, M4A, MP4\nClick 'Add Music Files' to upload multiple tracks at once from your computer", 
+                              font=('Arial', 9), foreground='gray')
+        info_label.grid(row=3, column=0, pady=(0, 10))
+        
+        # Status label
+        status_label = ttk.Label(main_frame, text="Ready", foreground="green")
+        status_label.grid(row=4, column=0, pady=(0, 10))
+        
+        # Close button
+        close_button = ttk.Button(main_frame, text="Close", command=dialog.destroy)
+        close_button.grid(row=5, column=0, pady=(10, 0))
+        
+        # Load current music files
+        self.refresh_music_list(music_listbox, status_label)
+    
+    def get_music_files(self):
+        """Get list of current music files in the music directory, avoiding duplicates"""
+        music_dir = "music"
+        if not os.path.exists(music_dir):
+            os.makedirs(music_dir, exist_ok=True)
+            return []
+        
+        # Group files by base name (without extension)
+        file_groups = {}
+        supported_formats = ('.mp3', '.wav', '.ogg', '.m4a', '.mp4')
+        
+        for filename in os.listdir(music_dir):
+            if filename.lower().endswith(supported_formats):
+                base_name = os.path.splitext(filename)[0]
+                extension = os.path.splitext(filename)[1].lower()
+                
+                if base_name not in file_groups:
+                    file_groups[base_name] = []
+                
+                file_groups[base_name].append({
+                    'filename': filename,
+                    'extension': extension,
+                    'path': os.path.join(music_dir, filename)
+                })
+        
+        # For each group, select the best format (preference order)
+        format_priority = {'.mp3': 1, '.m4a': 2, '.mp4': 3, '.wav': 4, '.ogg': 5}
+        music_files = []
+        
+        for base_name, files in file_groups.items():
+            # Sort by format priority (lower number = higher priority)
+            files.sort(key=lambda x: format_priority.get(x['extension'], 99))
+            
+            # Take the highest priority file
+            best_file = files[0]
+            display_name = base_name.replace('_', ' ').title()
+            
+            music_files.append({
+                'filename': best_file['filename'],
+                'display_name': display_name,
+                'path': best_file['path'],
+                'alternatives': len(files)  # How many format alternatives exist
+            })
+        
+        return sorted(music_files, key=lambda x: x['display_name'])
+    
+    def refresh_music_list(self, listbox, status_label):
+        """Refresh the music list display"""
+        try:
+            listbox.delete(0, tk.END)
+            music_files = self.get_music_files()
+            
+            if not music_files:
+                listbox.insert(tk.END, "No music files found. Click 'Add Music File' to add some!")
+                status_label.config(text="No music files in library", foreground="orange")
+            else:
+                for music_file in music_files:
+                    # Show if there are multiple formats available
+                    if music_file['alternatives'] > 1:
+                        display_text = f"{music_file['display_name']} ({music_file['filename']}) [{music_file['alternatives']} formats]"
+                    else:
+                        display_text = f"{music_file['display_name']} ({music_file['filename']})"
+                    listbox.insert(tk.END, display_text)
+                status_label.config(text=f"Found {len(music_files)} unique tracks", foreground="green")
+            
+            # Update the main music dropdown
+            self.update_music_dropdown()
+            
+        except Exception as e:
+            status_label.config(text=f"Error refreshing list: {str(e)}", foreground="red")
+    
+    def add_music_files(self, listbox, status_label):
+        """Add multiple music files from the user's computer"""
+        try:
+            # Open file dialog to select multiple music files
+            file_paths = filedialog.askopenfilenames(
+                title="Select Music Files (Multiple Selection Allowed)",
+                filetypes=[
+                    ("Audio/Video files", "*.mp3 *.wav *.ogg *.m4a *.mp4"),
+                    ("MP3 files", "*.mp3"),
+                    ("WAV files", "*.wav"),
+                    ("OGG files", "*.ogg"),
+                    ("M4A files", "*.m4a"),
+                    ("MP4 files", "*.mp4"),
+                    ("All files", "*.*")
+                ]
+            )
+            
+            if not file_paths:
+                return
+            
+            # Show progress dialog for multiple files
+            progress_dialog = tk.Toplevel(self.root)
+            progress_dialog.title("Adding Music Files")
+            progress_dialog.geometry("500x200")
+            progress_dialog.transient(self.root)
+            progress_dialog.grab_set()
+            
+            # Center the dialog
+            progress_dialog.update_idletasks()
+            x = (progress_dialog.winfo_screenwidth() // 2) - (250)
+            y = (progress_dialog.winfo_screenheight() // 2) - (100)
+            progress_dialog.geometry(f"500x200+{x}+{y}")
+            
+            frame = ttk.Frame(progress_dialog, padding="20")
+            frame.pack(fill=tk.BOTH, expand=True)
+            
+            ttk.Label(frame, text=f"Adding {len(file_paths)} music files...", 
+                     font=('Arial', 12)).pack(pady=(0, 10))
+            
+            # Progress bar
+            progress_var = tk.DoubleVar()
+            progress_bar = ttk.Progressbar(frame, variable=progress_var, maximum=100, length=400)
+            progress_bar.pack(pady=(0, 10))
+            
+            # Current file label
+            current_file_label = ttk.Label(frame, text="", font=('Arial', 10))
+            current_file_label.pack(pady=(0, 10))
+            
+            # Results
+            results = {"added": 0, "skipped": 0, "errors": 0}
+            
+            # Ensure music directory exists
+            music_dir = "music"
+            if not os.path.exists(music_dir):
+                os.makedirs(music_dir, exist_ok=True)
+            
+            # Process each file
+            for i, file_path in enumerate(file_paths):
+                try:
+                    # Update progress
+                    progress = (i / len(file_paths)) * 100
+                    progress_var.set(progress)
+                    
+                    # Get the original filename and extension
+                    original_filename = os.path.basename(file_path)
+                    name_without_ext, ext = os.path.splitext(original_filename)
+                    
+                    current_file_label.config(text=f"Processing: {original_filename}")
+                    progress_dialog.update()
+                    
+                    # Create display name from filename
+                    display_name = name_without_ext.replace('_', ' ').replace('-', ' ').title()
+                    
+                    # Create safe filename
+                    safe_name = "".join(c for c in display_name if c.isalnum() or c in (' ', '-', '_')).strip()
+                    safe_name = safe_name.replace(' ', '_').lower()
+                    
+                    if not safe_name:
+                        safe_name = f"track_{i+1}"
+                    
+                    # Create destination filename
+                    dest_filename = f"{safe_name}{ext.lower()}"
+                    dest_path = os.path.join(music_dir, dest_filename)
+                    
+                    # Check if file already exists
+                    counter = 1
+                    while os.path.exists(dest_path):
+                        dest_filename = f"{safe_name}_{counter}{ext.lower()}"
+                        dest_path = os.path.join(music_dir, dest_filename)
+                        counter += 1
+                    
+                    # Copy the file
+                    import shutil
+                    shutil.copy2(file_path, dest_path)
+                    results["added"] += 1
+                    
+                except Exception as e:
+                    print(f"Error adding {original_filename}: {e}")
+                    results["errors"] += 1
+                    continue
+            
+            # Complete progress
+            progress_var.set(100)
+            current_file_label.config(text="Complete!")
+            progress_dialog.update()
+            
+            # Close progress dialog after a short delay
+            progress_dialog.after(1000, progress_dialog.destroy)
+            
+            # Show results
+            if results["added"] > 0:
+                status_label.config(text=f"✅ Added {results['added']} tracks successfully!", foreground="green")
+                # Refresh the list
+                self.refresh_music_list(listbox, status_label)
+                
+                # Show summary if there were issues
+                if results["errors"] > 0:
+                    messagebox.showwarning("Partial Success", 
+                                         f"Added {results['added']} tracks successfully.\n"
+                                         f"{results['errors']} files had errors and were skipped.")
+                else:
+                    messagebox.showinfo("Success", 
+                                      f"Successfully added {results['added']} music tracks!\n\n"
+                                      f"All tracks are now available in your music library.")
+            else:
+                status_label.config(text="❌ No tracks were added", foreground="red")
+                messagebox.showerror("Error", "Failed to add any music tracks. Please check the file formats.")
+            
+        except Exception as e:
+            status_label.config(text=f"❌ Error adding files: {str(e)}", foreground="red")
+    
+    def rename_music_track(self, listbox, status_label):
+        """Rename a selected music track"""
+        try:
+            selection = listbox.curselection()
+            if not selection:
+                status_label.config(text="Please select a track to rename", foreground="orange")
+                return
+            
+            music_files = self.get_music_files()
+            if not music_files or selection[0] >= len(music_files):
+                status_label.config(text="Invalid selection", foreground="red")
+                return
+            
+            selected_file = music_files[selection[0]]
+            
+            # Create rename dialog
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Rename Track")
+            dialog.geometry("400x180")
+            dialog.transient(self.root)
+            dialog.grab_set()
+            
+            # Center the dialog
+            dialog.update_idletasks()
+            x = (dialog.winfo_screenwidth() // 2) - (200)
+            y = (dialog.winfo_screenheight() // 2) - (90)
+            dialog.geometry(f"400x180+{x}+{y}")
+            
+            frame = ttk.Frame(dialog, padding="20")
+            frame.pack(fill=tk.BOTH, expand=True)
+            
+            ttk.Label(frame, text=f"Rename: {selected_file['display_name']}", 
+                     font=('Arial', 12)).pack(pady=(0, 10))
+            
+            name_var = tk.StringVar(value=selected_file['display_name'])
+            name_entry = ttk.Entry(frame, textvariable=name_var, width=40, font=('Arial', 11))
+            name_entry.pack(pady=(0, 20))
+            name_entry.focus()
+            name_entry.select_range(0, tk.END)
+            
+            result = {"confirmed": False, "name": ""}
+            
+            def confirm_rename():
+                new_name = name_var.get().strip()
+                if new_name and new_name != selected_file['display_name']:
+                    result["name"] = new_name
+                    result["confirmed"] = True
+                    dialog.destroy()
+                elif not new_name:
+                    ttk.Label(frame, text="Please enter a name!", foreground="red").pack()
+                else:
+                    dialog.destroy()  # No change needed
+            
+            def cancel_rename():
+                dialog.destroy()
+            
+            button_frame = ttk.Frame(frame)
+            button_frame.pack(pady=(10, 0))
+            
+            ttk.Button(button_frame, text="Rename", command=confirm_rename).pack(side=tk.LEFT, padx=(0, 10))
+            ttk.Button(button_frame, text="Cancel", command=cancel_rename).pack(side=tk.LEFT)
+            
+            dialog.bind('<Return>', lambda e: confirm_rename())
+            dialog.wait_window()
+            
+            if result["confirmed"]:
+                # Create new filename
+                ext = os.path.splitext(selected_file['filename'])[1]
+                safe_name = "".join(c for c in result["name"] if c.isalnum() or c in (' ', '-', '_')).strip()
+                safe_name = safe_name.replace(' ', '_').lower()
+                new_filename = f"{safe_name}{ext}"
+                new_path = os.path.join("music", new_filename)
+                
+                # Check if new name already exists
+                counter = 1
+                while os.path.exists(new_path) and new_path != selected_file['path']:
+                    new_filename = f"{safe_name}_{counter}{ext}"
+                    new_path = os.path.join("music", new_filename)
+                    counter += 1
+                
+                # Rename the file
+                os.rename(selected_file['path'], new_path)
+                
+                status_label.config(text=f"✅ Renamed to: {result['name']}", foreground="green")
+                self.refresh_music_list(listbox, status_label)
+            
+        except Exception as e:
+            status_label.config(text=f"❌ Error renaming: {str(e)}", foreground="red")
+    
+    def delete_music_track(self, listbox, status_label):
+        """Delete a selected music track"""
+        try:
+            selection = listbox.curselection()
+            if not selection:
+                status_label.config(text="Please select a track to delete", foreground="orange")
+                return
+            
+            music_files = self.get_music_files()
+            if not music_files or selection[0] >= len(music_files):
+                status_label.config(text="Invalid selection", foreground="red")
+                return
+            
+            selected_file = music_files[selection[0]]
+            
+            # Confirm deletion
+            result = messagebox.askyesno(
+                "Confirm Deletion",
+                f"Are you sure you want to delete '{selected_file['display_name']}'?\n\nThis action cannot be undone."
+            )
+            
+            if result:
+                # Stop any currently playing music to release file locks
+                self._stop_all_music_playback()
+                
+                # Small delay to ensure file is released
+                import time
+                time.sleep(0.1)
+                
+                try:
+                    os.remove(selected_file['path'])
+                    status_label.config(text=f"✅ Deleted: {selected_file['display_name']}", foreground="green")
+                    self.refresh_music_list(listbox, status_label)
+                except PermissionError:
+                    status_label.config(text=f"❌ Cannot delete: File is in use. Stop preview first.", foreground="red")
+                except Exception as e:
+                    status_label.config(text=f"❌ Error deleting: {str(e)}", foreground="red")
+            
+        except Exception as e:
+            status_label.config(text=f"❌ Error deleting: {str(e)}", foreground="red")
+    
+    def preview_selected_track(self, listbox, status_label):
+        """Preview the selected music track"""
+        try:
+            selection = listbox.curselection()
+            if not selection:
+                status_label.config(text="Please select a track to preview", foreground="orange")
+                return
+            
+            music_files = self.get_music_files()
+            if not music_files or selection[0] >= len(music_files):
+                status_label.config(text="Invalid selection", foreground="red")
+                return
+            
+            selected_file = music_files[selection[0]]
+            
+            # Use the existing preview logic
+            try:
+                import pygame
+                pygame.mixer.init()
+                pygame.mixer.music.load(selected_file['path'])
+                pygame.mixer.music.play()
+                
+                # Stop after 10 seconds
+                self.root.after(10000, lambda: pygame.mixer.music.stop())
+                status_label.config(text=f"🎵 Playing: {selected_file['display_name']} (10 seconds)", foreground="green")
+                
+            except ImportError:
+                # Fallback to system player
+                import subprocess
+                import platform
+                
+                system = platform.system()
+                if system == "Windows":
+                    os.startfile(selected_file['path'])
+                elif system == "Darwin":  # macOS
+                    subprocess.run(["open", selected_file['path']])
+                else:  # Linux
+                    subprocess.run(["xdg-open", selected_file['path']])
+                
+                status_label.config(text=f"🎵 Opened in default player: {selected_file['display_name']}", foreground="green")
+                
+        except Exception as e:
+            status_label.config(text=f"❌ Preview failed: {str(e)}", foreground="red")
+    
+    def stop_music_preview(self, status_label):
+        """Stop any currently playing music preview"""
+        try:
+            self._stop_all_music_playback()
+            status_label.config(text="🔇 Preview stopped", foreground="blue")
+        except Exception as e:
+            status_label.config(text=f"❌ Error stopping preview: {str(e)}", foreground="red")
+    
+    def update_music_dropdown(self):
+        """Update the main interface music dropdown with current files"""
+        try:
+            music_files = self.get_music_files()
+            
+            # Build the values list
+            values = ["None", "Random"]
+            for music_file in music_files:
+                values.append(music_file['display_name'])
+            
+            # Update the combobox in the main interface
+            # Find the music combobox widget
+            for widget in self.root.winfo_children():
+                if isinstance(widget, ttk.Frame):
+                    for subwidget in widget.winfo_children():
+                        if isinstance(subwidget, ttk.LabelFrame) and "Video Settings" in str(subwidget.cget('text')):
+                            for setting_widget in subwidget.winfo_children():
+                                if isinstance(setting_widget, ttk.Combobox):
+                                    current_values = list(setting_widget['values'])
+                                    if "Random" in current_values:  # This is our music combobox
+                                        setting_widget.configure(values=values)
+                                        break
+            
+        except Exception as e:
+            print(f"Error updating music dropdown: {e}")
+    
+    def _stop_all_music_playback(self):
+        """Stop all music playback to release file locks"""
+        try:
+            # Try to stop pygame mixer if it's being used
+            import pygame
+            pygame.mixer.quit()
+            pygame.mixer.init()  # Reinitialize for future use
+        except ImportError:
+            # pygame not available, that's fine
+            pass
+        except Exception:
+            # pygame might not be initialized, that's fine too
+            pass
 
 def main():
     root = tk.Tk()
