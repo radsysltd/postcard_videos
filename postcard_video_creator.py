@@ -116,6 +116,7 @@ class PostcardVideoCreator:
         self.is_processing = False
         self.latest_video_path = None  # Track the most recently created video
         self.video_parts = []  # Track all created video parts for selection
+        self.regeneration_info = None  # Track regeneration details when recreating a specific part
         
         # Create default output directory if it doesn't exist
         if not os.path.exists(self.output_path):
@@ -210,6 +211,9 @@ class PostcardVideoCreator:
         
         # Load saved defaults after UI is set up
         self.load_defaults()
+        
+        # Always reset Start Part Number to 1 on app startup
+        self.starting_part_var.set(1)
         
         # Update button state to show default output directory
         self.update_create_button_state()
@@ -324,7 +328,7 @@ class PostcardVideoCreator:
         list_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
         
         # Create Treeview for postcard images
-        columns = ('✓', 'Image #', 'Filename', 'Duration (s)', 'Type', 'Status')
+        columns = ('✓', 'Image #', 'Filename', 'Duration (s)', 'Type', 'Preview')
         self.tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=8)
         
         for col in columns:
@@ -361,23 +365,7 @@ class PostcardVideoCreator:
         ttk.Button(control_button_frame, text="☐ Deselect All", 
                   command=self.deselect_all_images).grid(row=0, column=2, padx=(0, 10))
         
-        # Preview frame
-        preview_frame = ttk.LabelFrame(main_frame, text="Preview", padding="10")
-        preview_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
-        
-        # Preview canvas
-        self.preview_canvas = tk.Canvas(preview_frame, width=400, height=300, bg='white')
-        self.preview_canvas.grid(row=0, column=0, padx=(0, 10))
-        
-        # Preview info
-        info_frame = ttk.Frame(preview_frame)
-        info_frame.grid(row=0, column=1, sticky=(tk.N, tk.W))
-        
-        self.preview_label = ttk.Label(info_frame, text="No image selected")
-        self.preview_label.grid(row=0, column=0, sticky=tk.W)
-        
-        self.preview_info = ttk.Label(info_frame, text="")
-        self.preview_info.grid(row=1, column=0, sticky=tk.W, pady=(5, 0))
+        # No preview frame on main page - individual preview buttons will be added to tree
         
         # Bind tree selection and double-click for editing duration
         self.tree.bind('<<TreeviewSelect>>', self.on_tree_select)
@@ -395,7 +383,7 @@ class PostcardVideoCreator:
         
         # Progress and control frame
         control_frame = ttk.Frame(main_frame)
-        control_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        control_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
         # Progress bar
         self.progress_var = tk.DoubleVar()
@@ -418,6 +406,9 @@ class PostcardVideoCreator:
         self.part_selector = ttk.Combobox(control_frame, textvariable=self.part_selector_var,
                                          values=["Latest"], width=24, state="readonly")
         self.part_selector.grid(row=0, column=4, padx=(5, 0))
+        
+        # Bind part selection to automatically update image checkboxes
+        self.part_selector.bind('<<ComboboxSelected>>', self.on_part_selected)
         
         # Play video button
         self.play_button = ttk.Button(control_frame, text="▶️ PLAY VIDEO", 
@@ -446,8 +437,6 @@ class PostcardVideoCreator:
         file_frame.rowconfigure(1, weight=1)
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
-        preview_frame.columnconfigure(0, weight=1)
-        preview_frame.rowconfigure(0, weight=1)
         
     def update_resolution(self, event=None):
         resolution = self.resolution_var.get()
@@ -500,7 +489,7 @@ class PostcardVideoCreator:
             
             # Add to treeview
             filename = os.path.basename(path)
-            self.tree.insert('', 'end', values=("☑", f"{i+1}", filename, f"{self.default_duration}s", image_type, "Ready"))
+            self.tree.insert('', 'end', values=("☑", f"{i+1}", filename, f"{self.default_duration}s", image_type, "👁️ View"))
             
         # No dialog box - just update status
         self.status_label.config(text=f"Added {len(image_paths)} images ({len(image_paths)//2} postcards)")
@@ -512,6 +501,10 @@ class PostcardVideoCreator:
         self.postcard_images.clear()
         self.image_durations.clear()
         self.image_included.clear()
+        
+        # Clear regeneration info since we're starting fresh
+        self.regeneration_info = None
+        
         for item in self.tree.get_children():
             self.tree.delete(item)
         self.update_create_button_state()
@@ -924,7 +917,7 @@ class PostcardVideoCreator:
             os.path.basename(front_path),
             f"{self.default_duration}s",
             "Front",
-            title
+            "👁️ View"
         ))
         
         # Add back
@@ -933,8 +926,8 @@ class PostcardVideoCreator:
             f"{index//2 + 1}",
             os.path.basename(back_path),
             f"{self.default_duration}s",
-            "Back", 
-            title
+            "Back",
+            "👁️ View"
         ))
         
     def select_output_folder(self):
@@ -972,22 +965,23 @@ class PostcardVideoCreator:
                 self.button_status_label.config(text="⏳ Waiting for images and output folder", foreground='orange')
             
     def on_tree_select(self, event):
-        # Check if this selection was caused by a checkbox click
+        # Check if this selection was caused by a checkbox click or preview button click
         print(f"DEBUG: Tree selection event triggered")
         if hasattr(self, 'last_click_x') and hasattr(self, 'last_click_y'):
-            print(f"DEBUG: Checking if last click at ({self.last_click_x}, {self.last_click_y}) was on checkbox")
+            print(f"DEBUG: Checking if last click at ({self.last_click_x}, {self.last_click_y}) was on checkbox or preview")
+            
+            # Check if click was on Preview column
+            clicked_column = self.tree.identify_column(self.last_click_x)
+            if clicked_column == '#6':  # Preview column (6th column)
+                selection = self.tree.selection()
+                if selection:
+                    self.open_image_preview(selection[0])
+                return
+            
             # Try to process the last click as a checkbox click
             if self.process_checkbox_click(self.last_click_x, self.last_click_y):
                 print("DEBUG: Checkbox click processed, skipping normal selection")
-                return  # Skip normal preview if checkbox was clicked
-        
-        selection = self.tree.selection()
-        if selection:
-            item = selection[0]
-            index = self.tree.index(item)
-            if index < len(self.postcard_images):
-                image_path = self.postcard_images[index]
-                self.show_preview(image_path)
+                return  # Skip normal selection if checkbox was clicked
                 
     def on_tree_double_click(self, event):
         selection = self.tree.selection()
@@ -997,30 +991,143 @@ class PostcardVideoCreator:
             if index < len(self.image_durations):
                 self.edit_duration(index)
                 
-    def show_preview(self, image_path):
+    def open_image_preview(self, tree_item):
+        """Open a popup window showing the full-size image"""
         try:
-            # Load and resize image for preview
-            img = Image.open(image_path)
-            img.thumbnail((400, 300), Image.Resampling.LANCZOS)
-            photo = ImageTk.PhotoImage(img)
+            # Get image index from tree item
+            index = self.tree.index(tree_item)
+            if index >= len(self.postcard_images):
+                return
+                
+            image_path = self.postcard_images[index]
             
-            # Update canvas
-            self.preview_canvas.delete("all")
-            self.preview_canvas.create_image(200, 150, image=photo)
-            self.preview_canvas.image = photo  # Keep reference
-            
-            # Update info
+            # Get image info
             image_name = os.path.basename(image_path)
             image_index = self.postcard_images.index(image_path)
             image_type = "Front" if image_index % 2 == 0 else "Back"
             postcard_num = (image_index // 2) + 1
             duration = self.image_durations[image_index]
             
-            self.preview_label.config(text=f"Image {image_index + 1}: {image_name}")
-            self.preview_info.config(text=f"Type: {image_type} | Postcard: {postcard_num} | Duration: {duration}s")
+            # Create popup window
+            preview_window = tk.Toplevel(self.root)
+            preview_window.title(f"Preview: {image_name}")
+            preview_window.geometry("800x600")
+            preview_window.resizable(True, True)
+            
+            # Center the window
+            preview_window.transient(self.root)
+            preview_window.grab_set()
+            
+            # Create main frame
+            main_frame = ttk.Frame(preview_window, padding="10")
+            main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+            preview_window.columnconfigure(0, weight=1)
+            preview_window.rowconfigure(0, weight=1)
+            main_frame.columnconfigure(0, weight=1)
+            main_frame.rowconfigure(1, weight=1)
+            
+            # Info label
+            info_text = f"Postcard {postcard_num} - {image_type} | Duration: {duration}s"
+            info_label = ttk.Label(main_frame, text=info_text, font=('Arial', 12, 'bold'))
+            info_label.grid(row=0, column=0, pady=(0, 10))
+            
+            # Create canvas for image with scrollbars
+            canvas_frame = ttk.Frame(main_frame)
+            canvas_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+            canvas_frame.columnconfigure(0, weight=1)
+            canvas_frame.rowconfigure(0, weight=1)
+            
+            canvas = tk.Canvas(canvas_frame, bg='white')
+            v_scrollbar = ttk.Scrollbar(canvas_frame, orient=tk.VERTICAL, command=canvas.yview)
+            h_scrollbar = ttk.Scrollbar(canvas_frame, orient=tk.HORIZONTAL, command=canvas.xview)
+            canvas.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+            
+            canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+            v_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+            h_scrollbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
+            
+            # Load and display the image at full size
+            image = Image.open(image_path)
+            # Scale down if image is too large (max 1200x800)
+            max_size = (1200, 800)
+            if image.size[0] > max_size[0] or image.size[1] > max_size[1]:
+                image.thumbnail(max_size, Image.Resampling.LANCZOS)
+            
+            photo = ImageTk.PhotoImage(image)
+            canvas.create_image(0, 0, anchor=tk.NW, image=photo)
+            canvas.image = photo  # Keep reference
+            
+            # Configure scroll region
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            
+            # Add keyboard scrolling support
+            def scroll_canvas(event):
+                if event.keysym == 'Up':
+                    canvas.yview_scroll(-1, "units")
+                elif event.keysym == 'Down':
+                    canvas.yview_scroll(1, "units")
+                elif event.keysym == 'Left':
+                    canvas.xview_scroll(-1, "units")
+                elif event.keysym == 'Right':
+                    canvas.xview_scroll(1, "units")
+                elif event.keysym == 'Page_Up':
+                    canvas.yview_scroll(-5, "units")
+                elif event.keysym == 'Page_Down':
+                    canvas.yview_scroll(5, "units")
+                elif event.keysym == 'Home':
+                    canvas.yview_moveto(0)
+                elif event.keysym == 'End':
+                    canvas.yview_moveto(1)
+            
+            # Add mouse wheel and trackpad scrolling support
+            def scroll_with_mouse(event):
+                # Mouse wheel and trackpad vertical scrolling
+                if event.delta > 0:
+                    canvas.yview_scroll(-1, "units")
+                elif event.delta < 0:
+                    canvas.yview_scroll(1, "units")
+                    
+            def scroll_horizontal(event):
+                # Horizontal scrolling (Shift + mouse wheel or trackpad)
+                if event.delta > 0:
+                    canvas.xview_scroll(-1, "units")
+                elif event.delta < 0:
+                    canvas.xview_scroll(1, "units")
+            
+            # Bind mouse wheel events for both vertical and horizontal scrolling
+            canvas.bind('<MouseWheel>', scroll_with_mouse)  # Windows/Linux
+            canvas.bind('<Button-4>', lambda e: canvas.yview_scroll(-1, "units"))  # Linux scroll up
+            canvas.bind('<Button-5>', lambda e: canvas.yview_scroll(1, "units"))   # Linux scroll down
+            canvas.bind('<Shift-MouseWheel>', scroll_horizontal)  # Horizontal scroll
+            canvas.bind('<Shift-Button-4>', lambda e: canvas.xview_scroll(-1, "units"))  # Linux horizontal
+            canvas.bind('<Shift-Button-5>', lambda e: canvas.xview_scroll(1, "units"))   # Linux horizontal
+            
+            # Bind keyboard events to preview window and canvas
+            preview_window.bind('<Key>', scroll_canvas)
+            canvas.bind('<Key>', scroll_canvas)
+            
+            # Make the canvas focusable and set focus
+            canvas.configure(takefocus=True)
+            canvas.focus_set()
+            
+            # Close button
+            close_button = ttk.Button(main_frame, text="Close", command=preview_window.destroy)
+            close_button.grid(row=2, column=0, pady=(10, 0))
+            
+            # Bind Escape key to close
+            preview_window.bind('<Escape>', lambda e: preview_window.destroy())
+            
+            # Center the window on screen
+            preview_window.update_idletasks()
+            width = preview_window.winfo_width()
+            height = preview_window.winfo_height()
+            x = (preview_window.winfo_screenwidth() // 2) - (width // 2)
+            y = (preview_window.winfo_screenheight() // 2) - (height // 2)
+            preview_window.geometry(f"{width}x{height}+{x}+{y}")
             
         except Exception as e:
-            self.preview_label.config(text=f"Error loading preview: {str(e)}")
+            print(f"Error opening image preview: {e}")
+            messagebox.showerror("Preview Error", f"Could not open image preview: {str(e)}")
             
     def edit_duration(self, index):
         """Open dialog to edit duration for a specific image"""
@@ -1567,7 +1674,15 @@ class PostcardVideoCreator:
                     self.root.after(0, lambda p=overall_progress: self.progress_var.set(p))
                     
                     # Calculate actual part number using starting part number
-                    actual_part_number = self.starting_part_var.get() + batch_index
+                    # For regeneration, use the original part number instead
+                    if (hasattr(self, 'regeneration_info') and 
+                        self.regeneration_info and 
+                        self.regeneration_info.get('is_regeneration') and
+                        batch_index == 0):  # Should only be one batch for regeneration
+                        actual_part_number = self.regeneration_info.get('part_number')
+                        logging.info(f"DEBUG: Using original part number {actual_part_number} for regeneration")
+                    else:
+                        actual_part_number = self.starting_part_var.get() + batch_index
                     
                     # Always update start screen text with part number
                     part_text = f"{original_line1} (Part {actual_part_number})"
@@ -1593,7 +1708,42 @@ class PostcardVideoCreator:
             self.start_line1_var.set(original_line1)
             
             # Update video parts list and UI
-            self.update_video_parts_list(videos_created, original_line1, total_videos)
+            # Check if this is a regeneration - if so, don't clear the parts list
+            if (hasattr(self, 'regeneration_info') and 
+                self.regeneration_info and 
+                self.regeneration_info.get('is_regeneration')):
+                
+                logging.info(f"DEBUG: Processing regeneration - preserving parts list")
+                # For regeneration, just update the existing parts list
+                regenerated_part_number = self.regeneration_info.get('part_number')
+                logging.info(f"DEBUG: Looking for part {regenerated_part_number} in existing parts list")
+                
+                # Find the matching part in the existing list and update its path
+                part_found = False
+                for part in self.video_parts:
+                    if part.get('part_number') == regenerated_part_number:
+                        # Update the path to the new video
+                        if videos_created:
+                            part['path'] = videos_created[0]  # Should only be one video for regeneration
+                            part['filename'] = os.path.basename(videos_created[0])
+                            logging.info(f"DEBUG: Updated part {regenerated_part_number} with new path: {videos_created[0]}")
+                        
+                        # Set the selector to this part
+                        self.root.after(0, lambda: self.part_selector_var.set(part['display_name']))
+                        part_found = True
+                        break
+                
+                if not part_found:
+                    logging.error(f"DEBUG: Could not find part {regenerated_part_number} in existing parts list!")
+                
+                # Clear regeneration info after handling the regeneration
+                self.regeneration_info = None
+                logging.info("DEBUG: Cleared regeneration info after parts list update")
+                        
+            else:
+                logging.info(f"DEBUG: Normal batch creation - updating full parts list")
+                # Normal batch creation - update the full list
+                self.update_video_parts_list(videos_created, original_line1, total_videos, batches)
             
             # Show completion message
             if videos_created:
@@ -1714,22 +1864,36 @@ class PostcardVideoCreator:
             final_video = concatenate_videoclips(clips, method="compose")
             logging.info(f"DEBUG: Clips concatenated successfully for batch video")
             
-            # Generate output filename using original title (before part number was added)
+            # Get line1_text for logging regardless of regeneration
             line1_text = original_title if original_title else self.start_line1_var.get()
-            # Sanitize filename by removing invalid characters
-            safe_filename = "".join(c for c in line1_text if c.isalnum() or c in (' ', '-', '_')).strip()
-            safe_filename = safe_filename.replace(' ', '_')
             
-            if not safe_filename:  # Fallback if no valid characters
-                safe_filename = "postcard_video"
-            
-            # Add timestamp for uniqueness
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-            # Always use part numbers in filename, include dimensions
-            dimensions = f"{self.video_width}x{self.video_height}"
-            output_filename = f"{timestamp}_{safe_filename}_Part{part_number}_{dimensions}.mp4"
-            output_path = os.path.join(self.output_path, output_filename)
+            # Check if this is a regeneration of an existing part
+            if (hasattr(self, 'regeneration_info') and 
+                self.regeneration_info and 
+                self.regeneration_info.get('is_regeneration') and
+                self.regeneration_info.get('part_number') == part_number):
+                
+                # Use the original filename for regeneration
+                output_filename = self.regeneration_info['original_filename']
+                output_path = os.path.join(self.output_path, output_filename)
+                logging.info(f"DEBUG: Regenerating existing file: {output_filename}")
+                
+            else:
+                # Generate new output filename using original title (before part number was added)
+                # Sanitize filename by removing invalid characters
+                safe_filename = "".join(c for c in line1_text if c.isalnum() or c in (' ', '-', '_')).strip()
+                safe_filename = safe_filename.replace(' ', '_')
+                
+                if not safe_filename:  # Fallback if no valid characters
+                    safe_filename = "postcard_video"
+                
+                # Add timestamp for uniqueness
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                
+                # Always use part numbers in filename, include dimensions
+                dimensions = f"{self.video_width}x{self.video_height}"
+                output_filename = f"{timestamp}_{safe_filename}_Part{part_number}_{dimensions}.mp4"
+                output_path = os.path.join(self.output_path, output_filename)
             
             logging.info(f"DEBUG: Generated filename: {output_filename} from Line1: '{line1_text}' (Part {part_number})")
             
@@ -1868,6 +2032,13 @@ class PostcardVideoCreator:
             for clip in clips:
                 clip.close()
             
+            # Don't clear regeneration info here - it will be cleared later in process_videos_in_batches
+            # after the parts list is updated
+            if (hasattr(self, 'regeneration_info') and 
+                self.regeneration_info and 
+                self.regeneration_info.get('is_regeneration')):
+                logging.info("DEBUG: Video regeneration completed, but keeping regeneration_info for parts list update")
+            
             return output_path
             
         except Exception as e:
@@ -1878,7 +2049,7 @@ class PostcardVideoCreator:
             logging.error(f"FULL TRACEBACK: {full_traceback}")
             return None
         
-    def update_video_parts_list(self, video_paths, original_title, total_parts):
+    def update_video_parts_list(self, video_paths, original_title, total_parts, batches=None):
         """Update the video parts list and dropdown"""
         # Clear existing parts
         self.video_parts.clear()
@@ -1891,11 +2062,18 @@ class PostcardVideoCreator:
             actual_part_number = starting_part + i
             display_name = f"{original_title} (Part {actual_part_number})"
             
-            self.video_parts.append({
+            part_info = {
                 'path': video_path,
                 'display_name': display_name,
-                'part_number': actual_part_number
-            })
+                'part_number': actual_part_number,
+                'filename': os.path.basename(video_path)  # Store the original filename
+            }
+            
+            # Store batch indices if provided
+            if batches and i < len(batches):
+                part_info['batch_indices'] = batches[i]
+                
+            self.video_parts.append(part_info)
         
         # Update dropdown values
         dropdown_values = ["Latest"]
@@ -2165,7 +2343,29 @@ class PostcardVideoCreator:
             
             # Update video parts list for single video
             original_title = self.start_line1_var.get()
-            self.update_video_parts_list([output_path], original_title, 1)
+            
+            # Check if this is a regeneration - if so, don't clear the parts list
+            if (hasattr(self, 'regeneration_info') and 
+                self.regeneration_info and 
+                self.regeneration_info.get('is_regeneration')):
+                
+                # For regeneration, just update the selector to point to the regenerated part
+                regenerated_part_number = self.regeneration_info.get('part_number')
+                
+                # Find the matching part in the existing list and update its display
+                for part in self.video_parts:
+                    if part.get('part_number') == regenerated_part_number:
+                        # Update the path to the new video
+                        part['path'] = output_path
+                        part['filename'] = os.path.basename(output_path)
+                        
+                        # Set the selector to this part
+                        self.root.after(0, lambda: self.part_selector_var.set(part['display_name']))
+                        break
+                        
+            else:
+                # Normal single video creation - update the full list
+                self.update_video_parts_list([output_path], original_title, 1)
             
             # Show success message
             self.root.after(0, lambda: self.show_success_message(output_path, actual_minutes, actual_seconds))
@@ -3231,6 +3431,70 @@ class PostcardVideoCreator:
         """Play the most recently created video (legacy method)"""
         self.part_selector_var.set("Latest")
         self.play_selected_video()
+    
+    def on_part_selected(self, event=None):
+        """Handle when a user selects a specific part from the dropdown"""
+        selected_part = self.part_selector_var.get()
+        
+        # Skip if "Latest" is selected, but clear regeneration info
+        if selected_part == "Latest":
+            self.regeneration_info = None
+            return
+            
+        # Find the selected part in video_parts
+        selected_part_info = None
+        for part in self.video_parts:
+            if part['display_name'] == selected_part:
+                selected_part_info = part
+                break
+        
+        if not selected_part_info or 'batch_indices' not in selected_part_info:
+            print(f"DEBUG: No batch indices found for part: {selected_part}")
+            return
+            
+        batch_indices = selected_part_info['batch_indices']
+        part_number = selected_part_info['part_number']
+        
+        print(f"DEBUG: Selected part {part_number} with {len(batch_indices)} images")
+        
+        # First, uncheck all images
+        self.deselect_all_images()
+        
+        # Then, check only the images that belong to this part
+        for batch_idx in batch_indices:
+            if 0 <= batch_idx < len(self.image_included):
+                self.image_included[batch_idx] = True
+                
+        # Update the tree display to reflect the new selections
+        self.update_tree_checkboxes()
+        
+        # Set the starting part number to this part for regeneration
+        self.starting_part_var.set(part_number)
+        
+        # Store regeneration info for use during video creation
+        self.regeneration_info = {
+            'is_regeneration': True,
+            'part_number': part_number,
+            'original_filename': selected_part_info['filename'],
+            'original_path': selected_part_info['path']
+        }
+        
+        # Update status to inform user
+        pairs_count = len(batch_indices) // 2
+        self.status_label.config(text=f"🎯 Selected Part {part_number}: {pairs_count} pairs ready for regeneration")
+        
+        print(f"DEBUG: Part {part_number} selected - {pairs_count} image pairs, will regenerate {selected_part_info['filename']}")
+    
+    def update_tree_checkboxes(self):
+        """Update the tree display to show current checkbox states"""
+        for i, item_id in enumerate(self.tree.get_children()):
+            if i < len(self.image_included):
+                checkbox_state = "☑" if self.image_included[i] else "☐"
+                # Update the checkbox column (first column)
+                values = list(self.tree.item(item_id)['values'])
+                if len(values) > 0:  # Make sure we have values
+                    values[0] = checkbox_state  # First column is checkbox
+                    self.tree.item(item_id, values=values)
     
     def save_defaults(self):
         """Save current settings as defaults"""
