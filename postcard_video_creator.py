@@ -1,10 +1,12 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext
+from tkinter import ttk, filedialog, messagebox, scrolledtext, simpledialog
 import os
 import threading
 import time
 from PIL import Image, ImageTk
 import cv2
+import shutil
+import glob
 # Import core MoviePy modules first
 try:
     # Try newer MoviePy 2.x import structure
@@ -266,6 +268,18 @@ class PostcardVideoCreator:
         self.update_create_button_state()
         
     def setup_ui(self):
+        # Create simple menu
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+        
+        # Backups menu
+        backup_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Backups", menu=backup_menu)
+        backup_menu.add_command(label="💾 Create Manual Backup", command=self.manual_backup)
+        backup_menu.add_command(label="📁 Show Backup Folder", command=self.show_backup_folder)
+        backup_menu.add_separator()
+        backup_menu.add_command(label="🔄 Restore from Backup", command=self.restore_backup_dialog)
+        
         # Main frame
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -3809,8 +3823,44 @@ class PostcardVideoCreator:
             import numpy as np
             import cv2
             
-            # Create light gray background
-            frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 220
+            # Try to load vintage frame background, fallback to light gray
+            vintage_frame_path = os.path.join("images", "vintage_frame_background.png")
+            if os.path.exists(vintage_frame_path):
+                try:
+                    # Load the vintage frame image
+                    vintage_frame = cv2.imread(vintage_frame_path, cv2.IMREAD_UNCHANGED)
+                    if vintage_frame is not None:
+                        # Convert BGR to RGB if needed
+                        if vintage_frame.shape[2] == 4:  # RGBA
+                            vintage_frame_rgb = cv2.cvtColor(vintage_frame[:, :, :3], cv2.COLOR_BGR2RGB)
+                            alpha = vintage_frame[:, :, 3] / 255.0
+                        else:  # RGB
+                            vintage_frame_rgb = cv2.cvtColor(vintage_frame, cv2.COLOR_BGR2RGB)
+                            alpha = np.ones((vintage_frame.shape[0], vintage_frame.shape[1]))
+                        
+                        # Resize to video dimensions
+                        vintage_frame_rgb = cv2.resize(vintage_frame_rgb, (self.video_width, self.video_height))
+                        alpha = cv2.resize(alpha, (self.video_width, self.video_height))
+                        
+                        # Create background with vintage frame
+                        light_gray_bg = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 240
+                        frame = light_gray_bg.astype(np.float32)
+                        
+                        # Blend the vintage frame with the background using alpha channel
+                        if len(alpha.shape) == 2:
+                            alpha = np.stack([alpha, alpha, alpha], axis=2)
+                        frame = frame * (1 - alpha) + vintage_frame_rgb.astype(np.float32) * alpha
+                        frame = np.clip(frame, 0, 255).astype(np.uint8)
+                    else:
+                        # Fallback to light gray background
+                        frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 220
+                except Exception as e:
+                    print(f"Warning: Could not load vintage frame background: {e}")
+                    # Fallback to light gray background
+                    frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 220
+            else:
+                # Fallback to light gray background
+                frame = np.ones((self.video_height, self.video_width, 3), dtype=np.uint8) * 220
             
             # Get text content and settings
             line1_text = self.second_page_line1_var.get()
@@ -4139,9 +4189,124 @@ class PostcardVideoCreator:
                     values[0] = checkbox_state  # First column is checkbox
                     self.tree.item(item_id, values=values)
     
+    def create_backup(self):
+        """Create a backup of current defaults"""
+        try:
+            if not os.path.exists('defaults.json'):
+                return False
+            
+            # Create backups directory
+            backup_dir = "defaults_backups"
+            if not os.path.exists(backup_dir):
+                os.makedirs(backup_dir)
+            
+            # Create timestamped backup
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_path = os.path.join(backup_dir, f"defaults_backup_{timestamp}.json")
+            shutil.copy2('defaults.json', backup_path)
+            
+            logging.info(f"Created backup: {backup_path}")
+            return backup_path
+        except Exception as e:
+            logging.error(f"Backup failed: {e}")
+            return False
+
+    def manual_backup(self):
+        """Create a manual backup with user confirmation"""
+        backup_path = self.create_backup()
+        if backup_path:
+            messagebox.showinfo("Backup Created", f"Backup saved:\n{os.path.basename(backup_path)}")
+        else:
+            messagebox.showerror("Backup Failed", "Could not create backup")
+
+    def show_backup_folder(self):
+        """Open the backup folder in file explorer"""
+        backup_dir = "defaults_backups"
+        if os.path.exists(backup_dir):
+            if os.name == 'nt':  # Windows
+                os.startfile(backup_dir)
+            else:  # macOS/Linux
+                os.system(f'open "{backup_dir}"' if os.name == 'posix' else f'xdg-open "{backup_dir}"')
+        else:
+            messagebox.showinfo("No Backups", "No backup folder found. Create a backup first.")
+
+    def restore_backup_dialog(self):
+        """Show dialog to select and restore a backup"""
+        backup_dir = "defaults_backups"
+        if not os.path.exists(backup_dir):
+            messagebox.showinfo("No Backups", "No backup folder found. Create a backup first.")
+            return
+        
+        # Get backup files
+        backup_files = glob.glob(os.path.join(backup_dir, "defaults_backup_*.json"))
+        if not backup_files:
+            messagebox.showinfo("No Backups", "No backup files found.")
+            return
+        
+        # Sort by date (most recent first)
+        backup_files.sort(reverse=True)
+        
+        # Show selection dialog
+        backup_names = [os.path.basename(f) for f in backup_files]
+        
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Restore Backup")
+        dialog.geometry("600x400")
+        dialog.resizable(True, True)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        ttk.Label(dialog, text="Select backup to restore:", font=("TkDefaultFont", 12, "bold")).pack(pady=10)
+        
+        # Listbox with backup files
+        frame = ttk.Frame(dialog)
+        frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        listbox = tk.Listbox(frame, height=15)
+        scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=listbox.yview)
+        listbox.configure(yscrollcommand=scrollbar.set)
+        
+        for name in backup_names:
+            listbox.insert(tk.END, name)
+        
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Buttons
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=10)
+        
+        def restore_selected():
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showwarning("No Selection", "Please select a backup to restore.")
+                return
+            
+            backup_file = backup_files[selection[0]]
+            result = messagebox.askyesno("Confirm Restore", 
+                f"Restore from backup?\n\n{os.path.basename(backup_file)}\n\nThis will restart the app.")
+            
+            if result:
+                try:
+                    # Create backup of current before restoring
+                    self.create_backup()
+                    # Restore selected backup
+                    shutil.copy2(backup_file, 'defaults.json')
+                    messagebox.showinfo("Restore Complete", "Backup restored! App will restart.")
+                    dialog.destroy()
+                    self.root.quit()
+                except Exception as e:
+                    messagebox.showerror("Restore Failed", f"Error: {e}")
+        
+        ttk.Button(button_frame, text="Restore Selected", command=restore_selected).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+
     def save_defaults(self):
         """Save current settings as defaults"""
         try:
+            # Create backup before saving
+            self.create_backup()
+            
             import json
             
             defaults = {

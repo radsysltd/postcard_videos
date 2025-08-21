@@ -1,0 +1,110 @@
+Timestamp: 2025-08-22 00:21:38.150426
+Video Type: BATCH VIDEO
+
+============================================================
+DURATION ANALYSIS - BATCH VIDEO
+============================================================
+Clip 1: START CLIP = 3.00s
+Clip 2: GENERATED = 6.70s
+Clip 3: GENERATED = 6.50s
+Clip 4: GENERATED = 6.50s
+Clip 5: GENERATED = 6.50s
+Clip 6: GENERATED = 6.50s
+Clip 7: GENERATED = 6.50s
+Clip 8: GENERATED = 6.50s
+Clip 9: GENERATED = 6.50s
+Clip 10: GENERATED = 6.50s
+Clip 11: ENDING CLIP = 2.50s
+
+TOTAL CALCULATED: 64.20s
+============================================================
+
+FINAL VIDEO DURATION: 64.20s
+CALCULATED vs ACTUAL: 64.20s vs 64.20s
+✅ DURATION MATCH
+============================================================
+
+CONFIGURATION VALUES:
+========================================
+actual_start_duration_var: 3.0s
+actual_second_page_duration_var: 3.0s
+actual_ending_duration_var: 2.5s
+actual_pair_duration_var: 6.5s
+transition_duration_var: 1s
+second_page_enabled: False
+
+PAIR CALCULATION BREAKDOWN:
+  Total pair duration: 6.5s
+  Transition duration: 1.0s
+  Content duration: 5.5s
+  Calculated front: 3.3s
+  Calculated back: 2.2s
+
+DETAILED CLIP INFORMATION:
+========================================
+
+Clip 1:
+  Duration: 3.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 2:
+  Duration: 6.699999999999999
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 3:
+  Duration: 6.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 4:
+  Duration: 6.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 5:
+  Duration: 6.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 6:
+  Duration: 6.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 7:
+  Duration: 6.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 8:
+  Duration: 6.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 9:
+  Duration: 6.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 10:
+  Duration: 6.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 11:
+  Duration: 2.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False

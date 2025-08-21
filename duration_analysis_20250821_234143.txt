@@ -1,0 +1,68 @@
+Timestamp: 2025-08-21 23:41:43.451736
+Video Type: BATCH VIDEO
+
+============================================================
+DURATION ANALYSIS - BATCH VIDEO
+============================================================
+Clip 1: START CLIP = 4.00s
+Clip 2: GENERATED = 12.26s
+Clip 3: GENERATED = 14.10s
+Clip 4: GENERATED = 14.10s
+Clip 5: ENDING CLIP = 8.00s
+
+TOTAL CALCULATED: 52.46s
+============================================================
+
+FINAL VIDEO DURATION: 52.46s
+CALCULATED vs ACTUAL: 52.46s vs 52.46s
+✅ DURATION MATCH
+============================================================
+
+CONFIGURATION VALUES:
+========================================
+actual_start_duration_var: 4.0s
+actual_second_page_duration_var: 11.0s
+actual_ending_duration_var: 8.0s
+actual_pair_duration_var: 14.1s
+transition_duration_var: 1s
+second_page_enabled: False
+
+PAIR CALCULATION BREAKDOWN:
+  Total pair duration: 14.1s
+  Transition duration: 1.0s
+  Content duration: 13.1s
+  Calculated front: 7.859999999999999s
+  Calculated back: 5.24s
+
+DETAILED CLIP INFORMATION:
+========================================
+
+Clip 1:
+  Duration: 4.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 2:
+  Duration: 12.26
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 3:
+  Duration: 14.1
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 4:
+  Duration: 14.1
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 5:
+  Duration: 8.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False

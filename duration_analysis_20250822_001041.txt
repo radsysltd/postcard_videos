@@ -1,0 +1,96 @@
+Timestamp: 2025-08-22 00:10:41.797308
+Video Type: BATCH VIDEO
+
+============================================================
+DURATION ANALYSIS - BATCH VIDEO
+============================================================
+Clip 1: START CLIP = 4.00s
+Clip 2: GENERATED = 8.30s
+Clip 3: GENERATED = 7.50s
+Clip 4: GENERATED = 7.50s
+Clip 5: GENERATED = 7.50s
+Clip 6: GENERATED = 7.50s
+Clip 7: GENERATED = 7.50s
+Clip 8: GENERATED = 7.50s
+Clip 9: ENDING CLIP = 4.00s
+
+TOTAL CALCULATED: 61.30s
+============================================================
+
+FINAL VIDEO DURATION: 61.30s
+CALCULATED vs ACTUAL: 61.30s vs 61.30s
+✅ DURATION MATCH
+============================================================
+
+CONFIGURATION VALUES:
+========================================
+actual_start_duration_var: 4.0s
+actual_second_page_duration_var: 4.0s
+actual_ending_duration_var: 4.0s
+actual_pair_duration_var: 7.5s
+transition_duration_var: 1s
+second_page_enabled: False
+
+PAIR CALCULATION BREAKDOWN:
+  Total pair duration: 7.5s
+  Transition duration: 1.0s
+  Content duration: 6.5s
+  Calculated front: 3.9s
+  Calculated back: 2.6s
+
+DETAILED CLIP INFORMATION:
+========================================
+
+Clip 1:
+  Duration: 4.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 2:
+  Duration: 8.3
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 3:
+  Duration: 7.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 4:
+  Duration: 7.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 5:
+  Duration: 7.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 6:
+  Duration: 7.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 7:
+  Duration: 7.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 8:
+  Duration: 7.5
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 9:
+  Duration: 4.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
