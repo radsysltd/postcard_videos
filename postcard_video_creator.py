@@ -97,6 +97,20 @@ def get_latest_log_file():
     latest_log = sorted(log_files)[-1]
     return os.path.join(log_dir, latest_log)
 
+# YouTube API imports
+try:
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+    from google.auth.transport.requests import Request
+    import pickle
+    YOUTUBE_API_AVAILABLE = True
+    print("DEBUG: YouTube API libraries available")
+except ImportError as e:
+    YOUTUBE_API_AVAILABLE = False
+    print(f"YouTube API libraries not available: {e}")
+    print("Install with: pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client")
+
 class PostcardVideoCreator:
     def __init__(self, root):
         self.root = root
@@ -117,6 +131,11 @@ class PostcardVideoCreator:
         self.latest_video_path = None  # Track the most recently created video
         self.video_parts = []  # Track all created video parts for selection
         self.regeneration_info = None  # Track regeneration details when recreating a specific part
+        
+        # YouTube channel management
+        self.youtube_channels = []  # List of available channels
+        self.selected_channel_id = None  # Currently selected channel
+        self.default_channel_id = None  # Default channel for uploads
         
         # Create default output directory if it doesn't exist
         if not os.path.exists(self.output_path):
@@ -334,6 +353,10 @@ class PostcardVideoCreator:
         # Second page configuration button
         second_page_config_button = ttk.Button(settings_frame, text="📄 Configure Second Page", command=self.open_second_page_config)
         second_page_config_button.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
+        
+        # YouTube upload button
+        youtube_upload_button = ttk.Button(settings_frame, text="📺 Upload to YouTube", command=self.open_youtube_upload)
+        youtube_upload_button.grid(row=5, column=2, columnspan=2, sticky=tk.W, pady=(10, 0))
         
         # File selection frame
         file_frame = ttk.LabelFrame(main_frame, text="Postcard Images", padding="10")
@@ -6011,6 +6034,1342 @@ class PostcardVideoCreator:
         except Exception:
             # pygame might not be initialized, that's fine too
             pass
+
+    # YouTube Upload Functionality
+    def open_youtube_upload(self):
+        """Open YouTube upload dialog"""
+        if not YOUTUBE_API_AVAILABLE:
+            messagebox.showerror("YouTube API Not Available", 
+                               "YouTube API libraries are not installed.\n\n"
+                               "Please install them with:\n"
+                               "pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client")
+            return
+        
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Upload to YouTube")
+        dialog.geometry("800x600")
+        dialog.resizable(True, True)
+        
+        # Center the dialog
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        main_frame = ttk.Frame(dialog, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
+        
+        # Title
+        title_label = ttk.Label(main_frame, text="Upload Videos to YouTube", font=("Arial", 16, "bold"))
+        title_label.grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 20))
+        
+        # Authentication status
+        auth_frame = ttk.LabelFrame(main_frame, text="Authentication & Channel Selection", padding="10")
+        auth_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        auth_frame.columnconfigure(1, weight=1)
+        
+        self.auth_status_label = ttk.Label(auth_frame, text="Not authenticated", foreground="red")
+        self.auth_status_label.grid(row=0, column=0, sticky=tk.W)
+        
+        auth_button = ttk.Button(auth_frame, text="Authenticate", command=self.authenticate_youtube)
+        auth_button.grid(row=0, column=1, sticky=tk.E)
+        
+        # Re-authenticate button for troubleshooting
+        reauth_button = ttk.Button(auth_frame, text="Re-authenticate", command=self.force_reauthenticate)
+        reauth_button.grid(row=0, column=2, sticky=tk.E, padx=(5, 0))
+        
+        # Channel selection (initially hidden)
+        self.channel_frame = ttk.Frame(auth_frame)
+        self.channel_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(10, 0))
+        self.channel_frame.columnconfigure(1, weight=1)
+        
+        ttk.Label(self.channel_frame, text="Channel:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
+        self.channel_var = tk.StringVar()
+        self.channel_combo = ttk.Combobox(self.channel_frame, textvariable=self.channel_var, 
+                                        state="readonly", width=30)
+        self.channel_combo.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(0, 5))
+        self.channel_combo.bind('<<ComboboxSelected>>', self.on_channel_selected)
+        
+        self.set_default_button = ttk.Button(self.channel_frame, text="Set as Default", 
+                                           command=self.set_default_channel, state='disabled')
+        self.set_default_button.grid(row=0, column=2, padx=(5, 0))
+        
+        self.refresh_channels_button = ttk.Button(self.channel_frame, text="Refresh Channels", 
+                                                command=self.refresh_youtube_channels, state='disabled')
+        self.refresh_channels_button.grid(row=0, column=3, padx=(5, 0))
+        
+        # Add manual channel entry for missing channels
+        self.manual_channel_frame = ttk.Frame(self.channel_frame)
+        self.manual_channel_frame.grid(row=1, column=0, columnspan=4, sticky=(tk.W, tk.E), pady=(10, 0))
+        self.manual_channel_frame.columnconfigure(1, weight=1)
+        
+        ttk.Label(self.manual_channel_frame, text="Missing channel? Enter Channel ID (UC...):").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
+        self.manual_channel_id_var = tk.StringVar()
+        self.manual_channel_entry = ttk.Entry(self.manual_channel_frame, textvariable=self.manual_channel_id_var, 
+                                            width=30)
+        self.manual_channel_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(0, 5))
+        
+        # Add placeholder text functionality
+        self.manual_channel_entry.insert(0, "UC... (24 characters)")
+        self.manual_channel_entry.configure(foreground='grey')
+        
+        def on_entry_click(event):
+            if self.manual_channel_entry.get() == "UC... (24 characters)":
+                self.manual_channel_entry.delete(0, "end")
+                self.manual_channel_entry.configure(foreground='black')
+        
+        def on_focusout(event):
+            if self.manual_channel_entry.get() == "":
+                self.manual_channel_entry.insert(0, "UC... (24 characters)")
+                self.manual_channel_entry.configure(foreground='grey')
+        
+        self.manual_channel_entry.bind('<FocusIn>', on_entry_click)
+        self.manual_channel_entry.bind('<FocusOut>', on_focusout)
+        
+        self.add_manual_channel_button = ttk.Button(self.manual_channel_frame, text="Add Channel", 
+                                                  command=self.add_manual_channel, state='disabled')
+        self.add_manual_channel_button.grid(row=0, column=2, padx=(5, 0))
+        
+        # Initially hide channel selection
+        self.channel_frame.grid_remove()
+        
+        # Video selection
+        video_frame = ttk.LabelFrame(main_frame, text="Select Videos", padding="10")
+        video_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        video_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(2, weight=1)
+        
+        # SIMPLE approach - just put buttons directly in the frame with clear layout
+        # Row 0: Big prominent buttons
+        self.add_videos_button = ttk.Button(video_frame, text="📁 ADD VIDEOS", command=self.add_videos_to_upload, 
+                                          width=20)
+        self.add_videos_button.grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        
+        self.add_current_button = ttk.Button(video_frame, text="🎬 ADD CURRENT VIDEOS", command=self.add_current_videos,
+                                           width=25)
+        self.add_current_button.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # Row 1: Management buttons  
+        self.remove_button = ttk.Button(video_frame, text="🗑️ REMOVE SELECTED", command=self.remove_selected_videos,
+                                      width=20)
+        self.remove_button.grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+        
+        self.clear_button = ttk.Button(video_frame, text="🗂️ CLEAR ALL", command=self.clear_video_list,
+                                     width=15)
+        self.clear_button.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # Video list (moved to row 3 to give buttons space)
+        columns = ('File', 'Size', 'Status')
+        self.video_tree = ttk.Treeview(video_frame, columns=columns, show='headings', height=5)  # Reduced height
+        self.video_tree.grid(row=3, column=0, columnspan=4, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
+        
+        # Configure columns
+        self.video_tree.heading('File', text='Video File')
+        self.video_tree.heading('Size', text='Size (MB)')
+        self.video_tree.heading('Status', text='Status')
+        self.video_tree.column('File', width=400)
+        self.video_tree.column('Size', width=100)
+        self.video_tree.column('Status', width=150)
+        
+        # Scrollbar for video list
+        video_scrollbar = ttk.Scrollbar(video_frame, orient=tk.VERTICAL, command=self.video_tree.yview)
+        video_scrollbar.grid(row=3, column=4, sticky=(tk.N, tk.S))  # Adjusted row to match tree
+        self.video_tree.configure(yscrollcommand=video_scrollbar.set)
+        
+        # TEMPORARY: Add video buttons here since they're not showing in Select Videos section
+        temp_video_frame = ttk.LabelFrame(main_frame, text="🎬 ADD VIDEOS HERE (TEMPORARY)", padding="10")
+        temp_video_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
+        
+        print("DEBUG: Creating video buttons...")
+        
+        # Try creating buttons with debug output
+        try:
+            btn1 = ttk.Button(temp_video_frame, text="📁 ADD VIDEO FILES", command=self.add_videos_to_upload, width=20)
+            btn1.grid(row=0, column=0, padx=5, pady=5)
+            print("DEBUG: Button 1 created successfully")
+            
+            btn2 = ttk.Button(temp_video_frame, text="🎬 ADD CURRENT VIDEOS", command=self.add_current_videos, width=20)
+            btn2.grid(row=0, column=1, padx=5, pady=5)
+            print("DEBUG: Button 2 created successfully")
+            
+            btn3 = ttk.Button(temp_video_frame, text="🗑️ CLEAR ALL", command=self.clear_video_list, width=15)
+            btn3.grid(row=0, column=2, padx=5, pady=5)
+            print("DEBUG: Button 3 created successfully")
+            
+            # Force frame to show content
+            temp_video_frame.update()
+            print("DEBUG: Frame updated")
+            
+        except Exception as e:
+            print(f"DEBUG: Error creating buttons: {e}")
+        
+        # Add a test label to see if ANYTHING shows up in this frame
+        test_label = ttk.Label(temp_video_frame, text="🚨 TEST - If you see this, the frame works!", foreground="red")
+        test_label.grid(row=1, column=0, columnspan=3, pady=10)
+        print("DEBUG: Test label added")
+        
+        # ALSO add the video list here so it's visible
+        video_list_label = ttk.Label(temp_video_frame, text="📋 Videos to Upload:", font=("TkDefaultFont", 10, "bold"))
+        video_list_label.grid(row=2, column=0, columnspan=3, pady=(10, 5), sticky=tk.W)
+        
+        # Create a simpler video list that should be visible
+        self.temp_video_tree = ttk.Treeview(temp_video_frame, columns=('File', 'Size', 'Status'), show='headings', height=4)
+        self.temp_video_tree.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        
+        # Configure columns
+        self.temp_video_tree.heading('File', text='Video File')
+        self.temp_video_tree.heading('Size', text='Size (MB)')
+        self.temp_video_tree.heading('Status', text='Status')
+        self.temp_video_tree.column('File', width=300)
+        self.temp_video_tree.column('Size', width=80)
+        self.temp_video_tree.column('Status', width=100)
+        
+        print("DEBUG: Temporary video list created")
+        
+        # Upload settings (moved to row 4)
+        settings_frame = ttk.LabelFrame(main_frame, text="Upload Settings", padding="10")
+        settings_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        settings_frame.columnconfigure(1, weight=1)
+        
+        # Privacy status
+        ttk.Label(settings_frame, text="Privacy:").grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+        self.privacy_var = tk.StringVar(value="unlisted")
+        self.privacy_combo = ttk.Combobox(settings_frame, textvariable=self.privacy_var, 
+                                   values=["unlisted", "private", "public"], state="readonly", width=15)
+        self.privacy_combo.grid(row=0, column=1, sticky=tk.W, pady=(0, 5))
+        
+        # Playlist selection
+        ttk.Label(settings_frame, text="Playlist:").grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
+        self.playlist_var = tk.StringVar(value="None")
+        self.playlist_combo = ttk.Combobox(settings_frame, textvariable=self.playlist_var, 
+                                         values=["None"], width=25)  # Reduced width to make room
+        self.playlist_combo.grid(row=1, column=1, sticky=tk.W, pady=(0, 5))
+        
+        # Refresh playlists button (with debug)
+        self.refresh_playlists_button = ttk.Button(settings_frame, text="Refresh Playlists", command=self.refresh_and_debug_playlists)
+        self.refresh_playlists_button.grid(row=1, column=2, padx=(5, 0))
+        
+        # Playlist status label (shows which channel's playlists are displayed) - move to new row
+        self.playlist_status_label = ttk.Label(settings_frame, text="", foreground="grey", font=("TkDefaultFont", 8))
+        self.playlist_status_label.grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        
+        # Playlist help label - move to new row
+        playlist_help = ttk.Label(settings_frame, text="💡 Tip: Type new playlist name to create it automatically", 
+                                 foreground="blue", font=("TkDefaultFont", 8))
+        playlist_help.grid(row=3, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        
+        # Debug button for playlist troubleshooting (temporarily remove to save space)
+        # debug_playlist_button = ttk.Button(settings_frame, text="Debug Playlists", command=self.debug_playlists)
+        # debug_playlist_button.grid(row=1, column=5, sticky=tk.W, padx=(10, 0))
+        
+        # Title/Description template
+        ttk.Label(settings_frame, text="Title Template:").grid(row=4, column=0, sticky=tk.W, pady=(5, 0))
+        self.title_template_var = tk.StringVar(value="{filename} - Vintage Postcards")
+        title_entry = ttk.Entry(settings_frame, textvariable=self.title_template_var, width=50)
+        title_entry.grid(row=4, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
+        
+        ttk.Label(settings_frame, text="Description:").grid(row=5, column=0, sticky=(tk.W, tk.N), pady=(5, 0))
+        self.description_var = tk.StringVar(value="Vintage postcard collection featuring historical images.")
+        description_text = tk.Text(settings_frame, height=3, width=50)
+        description_text.grid(row=5, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
+        description_text.insert('1.0', self.description_var.get())
+        self.description_text = description_text
+        
+        # Progress and upload
+        progress_frame = ttk.LabelFrame(main_frame, text="Upload Progress", padding="10")
+        progress_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        progress_frame.columnconfigure(0, weight=1)
+        
+        self.upload_progress = ttk.Progressbar(progress_frame, mode='determinate')
+        self.upload_progress.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
+        
+        self.upload_status_label = ttk.Label(progress_frame, text="Ready to upload")
+        self.upload_status_label.grid(row=1, column=0, sticky=tk.W)
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 0))
+        
+        ttk.Button(button_frame, text="Close", command=dialog.destroy).grid(row=0, column=0, padx=(0, 10))
+        self.upload_button = ttk.Button(button_frame, text="Start Upload", command=self.start_youtube_upload, state='disabled')
+        self.upload_button.grid(row=0, column=1)
+        
+        # Store dialog reference
+        self.youtube_dialog = dialog
+        self.youtube_service = None
+        
+        # Initialize video list with current part videos if available
+        self.add_current_videos()
+
+    def authenticate_youtube(self):
+        """Authenticate with YouTube API and load available channels"""
+        try:
+            # Check for existing credentials
+            creds = None
+            if os.path.exists('youtube_token.pickle'):
+                with open('youtube_token.pickle', 'rb') as token:
+                    creds = pickle.load(token)
+            
+            # If there are no (valid) credentials available, request authorization
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    creds.refresh(Request())
+                else:
+                    # Check for client secrets file
+                    if not os.path.exists('client_secrets.json'):
+                        messagebox.showerror("Missing Credentials", 
+                                           "client_secrets.json file not found!\n\n"
+                                           "Please:\n"
+                                           "1. Go to Google Cloud Console\n"
+                                           "2. Enable YouTube Data API v3\n"
+                                           "3. Create OAuth 2.0 credentials\n"
+                                           "4. Download and save as 'client_secrets.json'")
+                        return
+                    
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        'client_secrets.json',
+                        scopes=['https://www.googleapis.com/auth/youtube.upload',
+                               'https://www.googleapis.com/auth/youtube']
+                    )
+                    creds = flow.run_local_server(port=0)
+                
+                # Save credentials for next run
+                with open('youtube_token.pickle', 'wb') as token:
+                    pickle.dump(creds, token)
+            
+            # Build the service
+            self.youtube_service = build('youtube', 'v3', credentials=creds)
+            
+            # Get all available channels
+            self.load_youtube_channels()
+                
+        except Exception as e:
+            self.auth_status_label.config(text=f"Authentication error: {str(e)[:50]}...", foreground="red")
+            messagebox.showerror("Authentication Error", f"Failed to authenticate:\n{str(e)}")
+
+    def load_youtube_channels(self):
+        """Load all available YouTube channels for the authenticated user"""
+        try:
+            # Get channels the user has access to
+            response = self.youtube_service.channels().list(part='snippet', mine=True).execute()
+            
+            # Debug: Print raw API response
+            print(f"DEBUG: YouTube API Response - found {len(response.get('items', []))} channels")
+            for item in response.get('items', []):
+                snippet = item.get('snippet', {})
+                print(f"DEBUG: Channel - ID: {item.get('id')}, Title: '{snippet.get('title')}', CustomURL: '{snippet.get('customUrl', 'None')}'")
+            
+            # Try additional methods to find all accessible channels
+            all_channels = response['items'].copy()  # Start with mine=True results
+            
+            # Method 1: Try managedByMe=True for Brand Accounts
+            try:
+                print("DEBUG: Trying managedByMe=True for Brand Accounts...")
+                managed_response = self.youtube_service.channels().list(part='snippet', managedByMe=True).execute()
+                print(f"DEBUG: managedByMe API Response - found {len(managed_response.get('items', []))} channels")
+                for item in managed_response.get('items', []):
+                    snippet = item.get('snippet', {})
+                    print(f"DEBUG: Managed Channel - ID: {item.get('id')}, Title: '{snippet.get('title')}', CustomURL: '{snippet.get('customUrl', 'None')}'")
+                    # Add if not already in list
+                    if not any(ch['id'] == item['id'] for ch in all_channels):
+                        all_channels.append(item)
+                        print(f"DEBUG: Added managed channel: {snippet.get('title')}")
+            except Exception as e:
+                print(f"DEBUG: managedByMe method failed: {e}")
+            
+            # Method 2: Try specific known channel IDs
+            known_channel_ids = self.get_known_channel_ids()
+            for channel_id in known_channel_ids:
+                try:
+                    print(f"DEBUG: Checking known channel ID: {channel_id}")
+                    specific_response = self.youtube_service.channels().list(part='snippet', id=channel_id).execute()
+                    if specific_response['items']:
+                        item = specific_response['items'][0]
+                        snippet = item.get('snippet', {})
+                        print(f"DEBUG: Found known channel - ID: {item.get('id')}, Title: '{snippet.get('title')}', CustomURL: '{snippet.get('customUrl', 'None')}'")
+                        # Add if not already in list
+                        if not any(ch['id'] == item['id'] for ch in all_channels):
+                            all_channels.append(item)
+                            print(f"DEBUG: Added known channel: {snippet.get('title')}")
+                except Exception as e:
+                    print(f"DEBUG: Known channel check failed for {channel_id}: {e}")
+            
+            # Use all found channels
+            response['items'] = all_channels
+            print(f"DEBUG: Total channels found across all methods: {len(all_channels)}")
+            
+            if not response['items']:
+                self.auth_status_label.config(text="No channels found", foreground="red")
+                messagebox.showwarning("No Channels Found", 
+                                     "No YouTube channels were found for this account.\n\n"
+                                     "Possible causes:\n"
+                                     "• You need to create a YouTube channel first\n"
+                                     "• The Google account may not have YouTube channel access\n"
+                                     "• You may need to sign in to a different Google account\n"
+                                     "• The channel might be a Brand Account (check console for debug info)")
+                return
+            
+            # Store channel information
+            self.youtube_channels = []
+            
+            for channel in response['items']:
+                channel_info = {
+                    'id': channel['id'],
+                    'title': channel['snippet']['title'],
+                    'description': channel['snippet'].get('description', ''),
+                    'custom_url': channel['snippet'].get('customUrl', '')
+                }
+                self.youtube_channels.append(channel_info)
+                print(f"DEBUG: Added channel to list - {channel_info['title']}")
+            
+            # Load saved default channel first
+            self.load_default_channel_id()
+            
+            # Now create display names with default marking
+            channel_names = []
+            for channel_info in self.youtube_channels:
+                # Create display name with custom URL if available
+                display_name = channel_info['title']
+                if channel_info['custom_url']:
+                    display_name += f" (@{channel_info['custom_url']})"
+                    
+                # Mark as default if this is the saved default channel
+                if channel_info['id'] == self.default_channel_id:
+                    display_name += " [DEFAULT]"
+                    
+                channel_names.append(display_name)
+                print(f"DEBUG: Channel display name: '{display_name}'")
+            
+            # Update channel combobox
+            self.channel_combo.configure(values=channel_names)
+            
+            # Set the selected channel in the combobox
+            self.select_default_channel()
+            
+            # Auto-set Vintage Postcard Archive as default if found and no default set
+            if not self.default_channel_id:
+                vintage_channel = next((ch for ch in self.youtube_channels if ch['id'] == 'UCgDAZ9kGH98mcoMnPOptXUw'), None)
+                if vintage_channel:
+                    print("DEBUG: Auto-setting Vintage Postcard Archive as default channel")
+                    self.default_channel_id = vintage_channel['id']
+                    self.selected_channel_id = vintage_channel['id']
+                    self.save_default_channel()
+                    # Update the combobox selection
+                    for i, channel in enumerate(self.youtube_channels):
+                        if channel['id'] == vintage_channel['id']:
+                            self.channel_combo.current(i)
+                            break
+                    self.refresh_channel_list()  # Update display with [DEFAULT] tag
+            
+            # Show channel selection frame
+            self.channel_frame.grid()
+            
+            # Update status and enable upload
+            if len(self.youtube_channels) == 1:
+                # Single channel - auto-select
+                self.channel_combo.current(0)
+                self.selected_channel_id = self.youtube_channels[0]['id']
+                self.auth_status_label.config(text=f"Authenticated: {self.youtube_channels[0]['title']}", foreground="green")
+            else:
+                # Multiple channels - show count
+                self.auth_status_label.config(text=f"Authenticated: {len(self.youtube_channels)} channels available", foreground="green")
+            
+            # Enable all buttons after successful authentication
+            if hasattr(self, 'upload_button'):
+                self.upload_button.config(state='normal')
+            if hasattr(self, 'set_default_button'):
+                self.set_default_button.config(state='normal')
+            if hasattr(self, 'refresh_channels_button'):
+                self.refresh_channels_button.config(state='normal')
+            if hasattr(self, 'add_manual_channel_button'):
+                self.add_manual_channel_button.config(state='normal')
+            
+            # Refresh playlists for the selected channel
+                self.refresh_playlists()
+                
+        except Exception as e:
+            self.auth_status_label.config(text=f"Channel loading error: {str(e)[:50]}...", foreground="red")
+            messagebox.showerror("Channel Loading Error", f"Failed to load channels:\n{str(e)}")
+
+    def refresh_playlists(self):
+        """Refresh the playlist dropdown for the selected channel"""
+        if not self.youtube_service:
+            return
+        
+        # Check if we have a selected channel
+        if not hasattr(self, 'selected_channel_id') or not self.selected_channel_id:
+            # No channel selected - clear playlists
+            self.playlist_combo.configure(values=["None"])
+            self.playlist_mapping = {"None": None}
+            if hasattr(self, 'playlist_status_label'):
+                self.playlist_status_label.config(text="No channel selected")
+            return
+        
+        try:
+            # Get playlists for the selected channel
+            playlists = []
+            
+            # Method 1: Try channelId parameter (works for some channels)
+            print(f"DEBUG: Trying playlists for channelId={self.selected_channel_id}")
+            try:
+                request = self.youtube_service.playlists().list(
+                    part='snippet', 
+                    channelId=self.selected_channel_id, 
+                    maxResults=50
+                )
+                
+                while request:
+                    response = request.execute()
+                    print(f"DEBUG: channelId method found {len(response.get('items', []))} playlists")
+                    for playlist in response['items']:
+                        playlists.append((playlist['snippet']['title'], playlist['id']))
+                        print(f"DEBUG: Found playlist: {playlist['snippet']['title']}")
+                    
+                    request = self.youtube_service.playlists().list_next(request, response)
+                    
+                print(f"DEBUG: Method 1 result: {len(playlists)} playlists found directly")
+                    
+            except Exception as channel_error:
+                print(f"DEBUG: channelId method failed: {channel_error}")
+            
+            # Method 1.5: Try with maxResults=1 to see if there's a pagination issue
+            if not playlists:
+                print(f"DEBUG: Trying channelId method with maxResults=1 to check pagination...")
+                try:
+                    request = self.youtube_service.playlists().list(
+                        part='snippet', 
+                        channelId=self.selected_channel_id, 
+                        maxResults=1
+                    )
+                    response = request.execute()
+                    print(f"DEBUG: Single result test found {len(response.get('items', []))} playlists")
+                    if response.get('items'):
+                        print(f"DEBUG: Found playlist with single query: {response['items'][0]['snippet']['title']}")
+                except Exception as single_error:
+                    print(f"DEBUG: Single result test failed: {single_error}")
+            
+            # Method 2: Try mine=True (works for owned channels and Brand Accounts you manage)
+            if not playlists:
+                print("DEBUG: Trying mine=True method for playlists")
+                try:
+                    request = self.youtube_service.playlists().list(part='snippet', mine=True, maxResults=50)
+                    while request:
+                        response = request.execute()
+                        print(f"DEBUG: mine=True method found {len(response.get('items', []))} total playlists")
+                        for playlist in response['items']:
+                            # Check if this playlist belongs to the selected channel
+                            playlist_channel_id = playlist['snippet'].get('channelId')
+                            playlist_title = playlist['snippet']['title']
+                            print(f"DEBUG: Playlist '{playlist_title}' belongs to channel {playlist_channel_id}")
+                            
+                            # ONLY add playlists that belong to the selected channel
+                            if playlist_channel_id == self.selected_channel_id:
+                                playlists.append((playlist_title, playlist['id']))
+                                print(f"DEBUG: ✅ Added playlist '{playlist_title}' (matches selected channel)")
+                            else:
+                                print(f"DEBUG: ❌ Skipped playlist '{playlist_title}' (wrong channel: {playlist_channel_id})")
+                            
+                        request = self.youtube_service.playlists().list_next(request, response)
+                    
+                    print(f"DEBUG: After filtering, found {len(playlists)} playlists for selected channel {self.selected_channel_id}")
+                    
+                    # Special debugging: Check if any playlist might be missing channelId
+                    print("DEBUG: Checking for playlists with missing or different channelId fields...")
+                    request_debug = self.youtube_service.playlists().list(part='snippet', mine=True, maxResults=50)
+                    while request_debug:
+                        response_debug = request_debug.execute()
+                        for playlist_debug in response_debug['items']:
+                            snippet = playlist_debug.get('snippet', {})
+                            playlist_title = snippet.get('title', 'Unknown')
+                            playlist_channel_id = snippet.get('channelId', 'MISSING')
+                            
+                            # Look for potential matches by checking if the playlist might belong to our channel
+                            if 'postcard' in playlist_title.lower() or 'vintage' in playlist_title.lower():
+                                print(f"DEBUG: 🔍 Potential match found - '{playlist_title}' (channelId: {playlist_channel_id})")
+                        
+                        request_debug = self.youtube_service.playlists().list_next(request_debug, response_debug)
+                    
+                except Exception as mine_error:
+                    print(f"DEBUG: mine=True method failed: {mine_error}")
+            
+            # Update combobox
+            playlist_names = ["None"] + [name for name, _ in playlists]
+            self.playlist_combo.configure(values=playlist_names)
+            
+            # Store playlist mapping
+            self.playlist_mapping = {"None": None}
+            for name, playlist_id in playlists:
+                self.playlist_mapping[name] = playlist_id
+            
+            # Debug info
+            print(f"DEBUG: Found {len(playlists)} playlists for channel {self.selected_channel_id}")
+            for name, _ in playlists:
+                print(f"DEBUG: Playlist - {name}")
+            
+            # Update status label to show which channel's playlists are displayed
+            if hasattr(self, 'playlist_status_label') and hasattr(self, 'youtube_channels'):
+                selected_channel = next((ch for ch in self.youtube_channels if ch['id'] == self.selected_channel_id), None)
+                if selected_channel:
+                    if len(playlists) == 0:
+                        status_text = f"No playlists found for {selected_channel['title']} - create them in YouTube Studio"
+                        self.playlist_status_label.config(text=status_text, foreground="orange")
+                    else:
+                        status_text = f"Showing {len(playlists)} playlists for {selected_channel['title']}"
+                        self.playlist_status_label.config(text=status_text, foreground="grey")
+                
+        except Exception as e:
+            print(f"DEBUG: Error fetching channel playlists: {e}")
+            # Fallback to mine=True if channel-specific request fails
+            try:
+                playlists = []
+                request = self.youtube_service.playlists().list(part='snippet', mine=True, maxResults=50)
+                while request:
+                    response = request.execute()
+                    for playlist in response['items']:
+                        # Apply same filtering in fallback
+                        playlist_channel_id = playlist['snippet'].get('channelId')
+                        playlist_title = playlist['snippet']['title']
+                        
+                        # ONLY add playlists that belong to the selected channel
+                        if playlist_channel_id == self.selected_channel_id:
+                            playlists.append((playlist_title, playlist['id']))
+                            print(f"DEBUG: Fallback ✅ Added playlist '{playlist_title}' (matches selected channel)")
+                        else:
+                            print(f"DEBUG: Fallback ❌ Skipped playlist '{playlist_title}' (wrong channel)")
+                            
+                    request = self.youtube_service.playlists().list_next(request, response)
+                
+                self.playlist_combo.configure(values=["None"] + [name for name, _ in playlists])
+                self.playlist_mapping = {"None": None}
+                for name, playlist_id in playlists:
+                    self.playlist_mapping[name] = playlist_id
+                    
+                print(f"DEBUG: Fallback - Found {len(playlists)} playlists for selected channel")
+                
+                # Update status label for fallback
+                if hasattr(self, 'playlist_status_label'):
+                    self.playlist_status_label.config(text=f"Showing {len(playlists)} playlists for selected channel (fallback)")
+                    
+            except Exception as fallback_error:
+                if hasattr(self, 'playlist_status_label'):
+                    self.playlist_status_label.config(text="Failed to load playlists")
+                messagebox.showerror("Playlist Error", f"Failed to fetch playlists:\n{str(fallback_error)}")
+
+    def create_playlist(self, playlist_name, channel_name):
+        """Create a new playlist under the selected channel"""
+        try:
+            print(f"DEBUG: Creating playlist '{playlist_name}' for channel '{channel_name}'")
+            
+            # Create playlist request body
+            playlist_body = {
+                'snippet': {
+                    'title': playlist_name,
+                    'description': f'Playlist created by Postcard Video Creator for {channel_name}',
+                    'defaultLanguage': 'en'
+                },
+                'status': {
+                    'privacyStatus': 'unlisted'  # Default to unlisted for new playlists
+                }
+            }
+            
+            # Create the playlist
+            request = self.youtube_service.playlists().insert(
+                part='snippet,status',
+                body=playlist_body
+            )
+            
+            response = request.execute()
+            playlist_id = response['id']
+            
+            print(f"DEBUG: Successfully created playlist '{playlist_name}' with ID: {playlist_id}")
+            return playlist_id
+            
+        except Exception as e:
+            print(f"DEBUG: Failed to create playlist '{playlist_name}': {e}")
+            return None
+
+    def debug_playlists(self):
+        """Debug method to help troubleshoot playlist detection issues"""
+        if not self.youtube_service or not self.selected_channel_id:
+            messagebox.showerror("Error", "Please authenticate and select a channel first")
+            return
+        
+        try:
+            print("\n" + "="*60)
+            print("DEBUG: COMPREHENSIVE PLAYLIST DEBUGGING")
+            print("="*60)
+            
+            selected_channel = next((ch for ch in self.youtube_channels if ch['id'] == self.selected_channel_id), None)
+            if selected_channel:
+                print(f"Selected Channel: {selected_channel['title']} (ID: {self.selected_channel_id})")
+            
+            # Method 1: All playlists with mine=True
+            print("\nMethod 1: All playlists (mine=True)")
+            print("-" * 40)
+            all_playlists = []
+            try:
+                request = self.youtube_service.playlists().list(part='snippet', mine=True, maxResults=50)
+                while request:
+                    response = request.execute()
+                    for playlist in response['items']:
+                        snippet = playlist['snippet']
+                        title = snippet.get('title', 'Unknown')
+                        channel_id = snippet.get('channelId', 'MISSING')
+                        playlist_id = playlist.get('id', 'MISSING')
+                        
+                        all_playlists.append({
+                            'title': title,
+                            'id': playlist_id,
+                            'channel_id': channel_id
+                        })
+                        
+                        match_indicator = "✅" if channel_id == self.selected_channel_id else "❌"
+                        print(f"{match_indicator} '{title}' | Channel: {channel_id} | ID: {playlist_id}")
+                    
+                    request = self.youtube_service.playlists().list_next(request, response)
+                    
+            except Exception as e:
+                print(f"ERROR in mine=True method: {e}")
+            
+            # Method 2: Direct channel query
+            print(f"\nMethod 2: Direct channel query (channelId={self.selected_channel_id})")
+            print("-" * 40)
+            try:
+                request = self.youtube_service.playlists().list(
+                    part='snippet', 
+                    channelId=self.selected_channel_id, 
+                    maxResults=50
+                )
+                response = request.execute()
+                
+                if response.get('items'):
+                    for playlist in response['items']:
+                        snippet = playlist['snippet']
+                        title = snippet.get('title', 'Unknown')
+                        playlist_id = playlist.get('id', 'MISSING')
+                        print(f"✅ '{title}' | ID: {playlist_id}")
+                else:
+                    print("No playlists found with direct channel query")
+                    
+            except Exception as e:
+                print(f"ERROR in channelId method: {e}")
+            
+            # Summary
+            matching_playlists = [p for p in all_playlists if p['channel_id'] == self.selected_channel_id]
+            print(f"\nSUMMARY:")
+            print(f"Total playlists found: {len(all_playlists)}")
+            print(f"Playlists for selected channel: {len(matching_playlists)}")
+            
+            if matching_playlists:
+                print(f"Matching playlists:")
+                for p in matching_playlists:
+                    print(f"  - '{p['title']}' (ID: {p['id']})")
+            else:
+                print("No playlists found for the selected channel")
+                print("This could mean:")
+                print("1. No playlists exist for this channel")
+                print("2. Playlists exist but API access is restricted")
+                print("3. Channel is a Brand Account with different permissions")
+            
+            print("="*60)
+            
+            messagebox.showinfo("Debug Complete", f"Debug results printed to console.\n\nFound {len(matching_playlists)} playlists for selected channel.")
+            
+        except Exception as e:
+            print(f"DEBUG ERROR: {e}")
+            messagebox.showerror("Debug Error", f"Debug failed:\n{str(e)}")
+
+    def refresh_and_debug_playlists(self):
+        """Refresh playlists and run comprehensive debug if no playlists found"""
+        print("DEBUG: Starting refresh and debug process...")
+        
+        # First run the normal refresh
+        self.refresh_playlists()
+        
+        # Check playlist mapping after refresh
+        playlist_count = 0
+        if hasattr(self, 'playlist_mapping'):
+            playlist_count = len([k for k in self.playlist_mapping.keys() if k != "None"])
+            print(f"DEBUG: Found {playlist_count} playlists after refresh")
+        
+        # If still no playlists found, run debug automatically
+        if playlist_count == 0:
+            print("\nDEBUG: No playlists found, running comprehensive debug...")
+            self.debug_playlists()
+        else:
+            print(f"DEBUG: Refresh successful - found {playlist_count} playlists")
+
+    def on_channel_selected(self, event=None):
+        """Handle channel selection change"""
+        try:
+            selected_index = self.channel_combo.current()
+            if selected_index >= 0 and selected_index < len(self.youtube_channels):
+                self.selected_channel_id = self.youtube_channels[selected_index]['id']
+                selected_channel = self.youtube_channels[selected_index]
+                
+                # Update status display
+                status_text = f"Selected: {selected_channel['title']}"
+                if selected_channel['id'] == self.default_channel_id:
+                    status_text += " (Default)"
+                self.auth_status_label.config(text=status_text, foreground="green")
+                
+                # Refresh playlists for the selected channel
+                self.refresh_playlists()
+                
+        except Exception as e:
+            messagebox.showerror("Channel Selection Error", f"Failed to select channel:\n{str(e)}")
+
+    def set_default_channel(self):
+        """Set the currently selected channel as default"""
+        try:
+            if not self.selected_channel_id:
+                messagebox.showwarning("No Channel Selected", "Please select a channel first.")
+                return
+            
+            self.default_channel_id = self.selected_channel_id
+            self.save_default_channel()
+            
+            # Refresh the channel list to show [DEFAULT] tag
+            self.refresh_channel_list()
+            
+            # Update status display
+            selected_channel = next((ch for ch in self.youtube_channels if ch['id'] == self.selected_channel_id), None)
+            if selected_channel:
+                self.auth_status_label.config(text=f"Selected: {selected_channel['title']} (Default)", foreground="green")
+                messagebox.showinfo("Default Channel Set", f"'{selected_channel['title']}' has been set as your default channel.")
+                
+        except Exception as e:
+            messagebox.showerror("Set Default Error", f"Failed to set default channel:\n{str(e)}")
+
+    def load_default_channel_id(self):
+        """Load the saved default channel ID"""
+        try:
+            # Try to load from defaults.json
+            if os.path.exists('defaults.json'):
+                with open('defaults.json', 'r') as f:
+                    defaults = json.load(f)
+                    self.default_channel_id = defaults.get('default_youtube_channel_id', None)
+                
+        except Exception as e:
+            print(f"Warning: Could not load default channel: {e}")
+            self.default_channel_id = None
+
+    def select_default_channel(self):
+        """Select the default channel in the combobox"""
+        try:
+            # Set the default channel if found
+            if self.default_channel_id:
+                for i, channel in enumerate(self.youtube_channels):
+                    if channel['id'] == self.default_channel_id:
+                        self.channel_combo.current(i)
+                        self.selected_channel_id = self.default_channel_id
+                        return
+            
+            # If no saved default or channel not found, use first channel
+            if self.youtube_channels:
+                self.channel_combo.current(0)
+                self.selected_channel_id = self.youtube_channels[0]['id']
+                
+        except Exception as e:
+            print(f"Warning: Could not select default channel: {e}")
+            # Fallback to first channel
+            if self.youtube_channels:
+                self.channel_combo.current(0)
+                self.selected_channel_id = self.youtube_channels[0]['id']
+
+    def save_default_channel(self):
+        """Save the default channel preference to defaults.json"""
+        try:
+            # Load existing defaults
+            defaults = {}
+            if os.path.exists('defaults.json'):
+                with open('defaults.json', 'r') as f:
+                    defaults = json.load(f)
+            
+            # Update with new default channel
+            defaults['default_youtube_channel_id'] = self.default_channel_id
+            
+            # Save back to file
+            with open('defaults.json', 'w') as f:
+                json.dump(defaults, f, indent=2)
+                
+        except Exception as e:
+            print(f"Warning: Could not save default channel: {e}")
+
+    def refresh_channel_list(self):
+        """Refresh the channel list display to update [DEFAULT] tags"""
+        try:
+            # Get current selection
+            current_selection = self.channel_combo.current()
+            
+            # Recreate display names with updated default marking
+            channel_names = []
+            for channel_info in self.youtube_channels:
+                display_name = channel_info['title']
+                if channel_info['custom_url']:
+                    display_name += f" (@{channel_info['custom_url']})"
+                    
+                # Mark as default if this is the saved default channel
+                if channel_info['id'] == self.default_channel_id:
+                    display_name += " [DEFAULT]"
+                    
+                channel_names.append(display_name)
+            
+            # Update channel combobox
+            self.channel_combo.configure(values=channel_names)
+            
+            # Restore selection
+            if current_selection >= 0:
+                self.channel_combo.current(current_selection)
+                
+        except Exception as e:
+            print(f"Warning: Could not refresh channel list: {e}")
+
+    def refresh_youtube_channels(self):
+        """Refresh the list of YouTube channels"""
+        if not self.youtube_service:
+            messagebox.showerror("Error", "Please authenticate first")
+            return
+        
+        try:
+            self.auth_status_label.config(text="Refreshing channels...", foreground="blue")
+            self.load_youtube_channels()
+        except Exception as e:
+            self.auth_status_label.config(text=f"Refresh failed: {str(e)[:50]}...", foreground="red")
+            messagebox.showerror("Refresh Error", f"Failed to refresh channels:\n{str(e)}")
+
+    def force_reauthenticate(self):
+        """Force re-authentication by clearing stored credentials"""
+        try:
+            # Remove stored token to force re-authentication
+            if os.path.exists('youtube_token.pickle'):
+                os.remove('youtube_token.pickle')
+                print("DEBUG: Removed stored YouTube token")
+            
+            # Clear current session
+            self.youtube_service = None
+            self.youtube_channels = []
+            self.selected_channel_id = None
+            
+            # Update UI
+            self.auth_status_label.config(text="Please re-authenticate", foreground="orange")
+            self.channel_frame.grid_remove()
+            
+            # Now authenticate again
+            self.authenticate_youtube()
+            
+        except Exception as e:
+            messagebox.showerror("Re-authentication Error", f"Failed to re-authenticate:\n{str(e)}")
+
+    def add_manual_channel(self):
+        """Add a channel manually by Channel ID"""
+        if not self.youtube_service:
+            messagebox.showerror("Error", "Please authenticate first")
+            return
+        
+        channel_id = self.manual_channel_id_var.get().strip()
+        
+        # Check for placeholder text
+        if not channel_id or channel_id == "UC... (24 characters)":
+            messagebox.showwarning("Missing Channel ID", "Please enter a Channel ID")
+            return
+        
+        if not channel_id.startswith('UC') or len(channel_id) != 24:
+            messagebox.showwarning("Invalid Channel ID", 
+                                 "Channel ID should start with 'UC' and be 24 characters long.\n\n"
+                                 "Example: UCrbdh09LJxCeu8yi_OwhKbg")
+            return
+        
+        try:
+            self.auth_status_label.config(text="Checking channel...", foreground="blue")
+            
+            # Try to get channel info by ID
+            response = self.youtube_service.channels().list(
+                part='snippet',
+                id=channel_id
+            ).execute()
+            
+            if not response['items']:
+                messagebox.showerror("Channel Not Found", 
+                                   f"No channel found with ID: {channel_id}\n\n"
+                                   "Please check:\n"
+                                   "• The Channel ID is correct\n"
+                                   "• The channel is public\n"
+                                   "• You have permission to access it")
+                self.auth_status_label.config(text=f"Authenticated: {len(self.youtube_channels)} channels available", foreground="green")
+                return
+            
+            channel = response['items'][0]
+            channel_info = {
+                'id': channel['id'],
+                'title': channel['snippet']['title'],
+                'description': channel['snippet'].get('description', ''),
+                'custom_url': channel['snippet'].get('customUrl', ''),
+                'manually_added': True  # Mark as manually added
+            }
+            
+            # Check if channel already exists
+            for existing_channel in self.youtube_channels:
+                if existing_channel['id'] == channel_id:
+                    messagebox.showinfo("Channel Already Added", f"'{channel_info['title']}' is already in the list")
+                    self.auth_status_label.config(text=f"Authenticated: {len(self.youtube_channels)} channels available", foreground="green")
+                    return
+            
+            # Add to channel list
+            self.youtube_channels.append(channel_info)
+            print(f"DEBUG: Manually added channel - {channel_info['title']}")
+            
+            # Save this channel ID for future automatic detection
+            self.save_known_channel_id(channel_id)
+            
+            # Refresh the display
+            self.refresh_channel_list()
+            
+            # Select the newly added channel
+            for i, ch in enumerate(self.youtube_channels):
+                if ch['id'] == channel_id:
+                    self.channel_combo.current(i)
+                    self.selected_channel_id = channel_id
+                    break
+            
+            # Update status
+            self.auth_status_label.config(text=f"Added: {channel_info['title']}", foreground="green")
+            messagebox.showinfo("Channel Added", f"Successfully added '{channel_info['title']}' to the channel list!")
+            
+            # Clear the entry and restore placeholder
+            self.manual_channel_entry.delete(0, "end")
+            self.manual_channel_entry.insert(0, "UC... (24 characters)")
+            self.manual_channel_entry.configure(foreground='grey')
+            
+            # Refresh playlists for the new channel
+            self.refresh_playlists()
+            
+        except Exception as e:
+            self.auth_status_label.config(text=f"Add channel failed: {str(e)[:50]}...", foreground="red")
+            messagebox.showerror("Add Channel Error", f"Failed to add channel:\n{str(e)}")
+
+    def get_known_channel_ids(self):
+        """Get list of known channel IDs to check during authentication"""
+        known_ids = ['UCgDAZ9kGH98mcoMnPOptXUw']  # Your Vintage Postcard Archive channel
+        
+        # Also check if there are any saved manually added channels in defaults
+        try:
+            if os.path.exists('defaults.json'):
+                with open('defaults.json', 'r') as f:
+                    defaults = json.load(f)
+                    saved_channels = defaults.get('known_youtube_channels', [])
+                    known_ids.extend(saved_channels)
+        except Exception as e:
+            print(f"DEBUG: Could not load known channels from defaults: {e}")
+        
+        # Remove duplicates
+        return list(set(known_ids))
+
+    def save_known_channel_id(self, channel_id):
+        """Save a manually added channel ID to the known channels list"""
+        try:
+            defaults = {}
+            if os.path.exists('defaults.json'):
+                with open('defaults.json', 'r') as f:
+                    defaults = json.load(f)
+            
+            known_channels = defaults.get('known_youtube_channels', [])
+            if channel_id not in known_channels:
+                known_channels.append(channel_id)
+                defaults['known_youtube_channels'] = known_channels
+                
+                with open('defaults.json', 'w') as f:
+                    json.dump(defaults, f, indent=2)
+                print(f"DEBUG: Saved {channel_id} to known channels list")
+        except Exception as e:
+            print(f"DEBUG: Could not save known channel: {e}")
+
+    def add_videos_to_upload(self):
+        """Add videos manually to upload list"""
+        filetypes = [
+            ("Video files", "*.mp4 *.avi *.mov *.mkv *.wmv"),
+            ("MP4 files", "*.mp4"),
+            ("All files", "*.*")
+        ]
+        
+        files = filedialog.askopenfilenames(
+            title="Select videos to upload",
+            filetypes=filetypes
+        )
+        
+        for file_path in files:
+            self.add_video_to_list(file_path)
+
+    def add_current_videos(self):
+        """Add current part videos to upload list"""
+        for part_info in self.video_parts:
+            if 'path' in part_info and os.path.exists(part_info['path']):
+                self.add_video_to_list(part_info['path'])
+
+    def add_video_to_list(self, file_path):
+        """Add a single video to the upload list"""
+        try:
+            # Check if already in original list
+            for item in self.video_tree.get_children():
+                if self.video_tree.item(item)['values'][0] == file_path:
+                    return  # Already added
+            
+            # Get file size
+            size_mb = os.path.getsize(file_path) / (1024 * 1024)
+            filename = os.path.basename(file_path)
+            
+            # Add to original tree (might not be visible)
+            self.video_tree.insert('', 'end', values=(file_path, f"{size_mb:.1f}", "Ready"))
+            
+            # ALSO add to temporary tree (should be visible)
+            if hasattr(self, 'temp_video_tree'):
+                # Check if already in temp list
+                temp_exists = False
+                for item in self.temp_video_tree.get_children():
+                    if self.temp_video_tree.item(item)['values'][0] == filename:
+                        temp_exists = True
+                        break
+                
+                if not temp_exists:
+                    self.temp_video_tree.insert('', 'end', values=(filename, f"{size_mb:.1f}", "Ready"))
+                    print(f"DEBUG: Added {filename} to temporary video list")
+            
+            # Enable upload button if we have videos
+            if hasattr(self, 'upload_button'):
+                self.upload_button.config(state='normal')
+                print("DEBUG: Upload button enabled")
+            
+        except Exception as e:
+            print(f"DEBUG: Error adding video: {e}")
+            messagebox.showerror("Error", f"Failed to add video:\n{str(e)}")
+
+    def remove_selected_videos(self):
+        """Remove selected videos from upload list"""
+        selected_items = self.video_tree.selection()
+        for item in selected_items:
+            self.video_tree.delete(item)
+
+    def clear_video_list(self):
+        """Clear all videos from upload list"""
+        for item in self.video_tree.get_children():
+            self.video_tree.delete(item)
+
+    def start_youtube_upload(self):
+        """Start uploading videos to YouTube"""
+        if not self.youtube_service:
+            messagebox.showerror("Error", "Please authenticate first")
+            return
+        
+        if not self.selected_channel_id:
+            messagebox.showerror("Error", "Please select a channel first")
+            return
+        
+        videos = []
+        for item in self.video_tree.get_children():
+            file_path = self.video_tree.item(item)['values'][0]
+            if os.path.exists(file_path):
+                videos.append((item, file_path))
+        
+        if not videos:
+            messagebox.showerror("Error", "No videos to upload")
+            return
+        
+        # Get selected channel info for confirmation
+        selected_channel = next((ch for ch in self.youtube_channels if ch['id'] == self.selected_channel_id), None)
+        if not selected_channel:
+            messagebox.showerror("Error", "Selected channel not found")
+            return
+        
+        # Show confirmation dialog
+        channel_display = selected_channel['title']
+        if selected_channel['custom_url']:
+            channel_display += f" (@{selected_channel['custom_url']})"
+        
+        confirm_msg = f"Upload {len(videos)} video(s) to channel:\n'{channel_display}'?\n\nPrivacy: {self.privacy_var.get().title()}"
+        if not messagebox.askyesno("Confirm Upload", confirm_msg):
+            return
+        
+        # Get upload settings
+        privacy = self.privacy_var.get()
+        playlist_name = self.playlist_var.get().strip()
+        playlist_id = self.playlist_mapping.get(playlist_name) if hasattr(self, 'playlist_mapping') else None
+        title_template = self.title_template_var.get()
+        description = self.description_text.get('1.0', 'end-1c')
+        
+        # Debug playlist creation logic
+        print(f"DEBUG PLAYLIST: playlist_name='{playlist_name}', playlist_id={playlist_id}")
+        print(f"DEBUG PLAYLIST: has_mapping={hasattr(self, 'playlist_mapping')}")
+        if hasattr(self, 'playlist_mapping'):
+            print(f"DEBUG PLAYLIST: available_playlists={list(self.playlist_mapping.keys())}")
+        
+        # Handle playlist creation if needed
+        if playlist_name and playlist_name != "None" and not playlist_id:
+            print(f"DEBUG PLAYLIST: Triggering playlist creation for '{playlist_name}'")
+            # Playlist name specified but doesn't exist - ask to create it
+            create_msg = f"Playlist '{playlist_name}' does not exist.\n\n"
+            create_msg += f"Create new playlist:\n"
+            create_msg += f"• Name: {playlist_name}\n"
+            create_msg += f"• Channel: {selected_channel['title']}\n"
+            create_msg += f"• Privacy: Unlisted\n"
+            create_msg += f"• Videos to add: {len(videos)}"
+            
+            if messagebox.askyesno("Create New Playlist", create_msg):
+                playlist_id = self.create_playlist(playlist_name, selected_channel['title'])
+                if playlist_id:
+                    # Update the mapping and refresh the dropdown
+                    if not hasattr(self, 'playlist_mapping'):
+                        self.playlist_mapping = {}
+                    self.playlist_mapping[playlist_name] = playlist_id
+                    messagebox.showinfo("Playlist Created", f"Successfully created playlist '{playlist_name}'")
+                    # Refresh playlists to show the new one
+                    self.refresh_playlists()
+                else:
+                    messagebox.showerror("Error", f"Failed to create playlist '{playlist_name}'. Upload cancelled.")
+                    self.upload_button.config(state='normal')
+                    return
+            else:
+                # User chose not to create playlist - continue without playlist
+                playlist_id = None
+        else:
+            print(f"DEBUG PLAYLIST: Not triggering creation. Conditions:")
+            print(f"  - playlist_name present: {bool(playlist_name)}")
+            print(f"  - playlist_name != 'None': {playlist_name != 'None'}")
+            print(f"  - not playlist_id: {not playlist_id}")
+        
+        # Disable upload button during upload
+        self.upload_button.config(state='disabled')
+        
+        # Start upload in separate thread
+        upload_thread = threading.Thread(
+            target=self.upload_videos_thread,
+            args=(videos, privacy, playlist_id, title_template, description)
+        )
+        upload_thread.daemon = True
+        upload_thread.start()
+
+    def upload_videos_thread(self, videos, privacy, playlist_id, title_template, description):
+        """Upload videos in a separate thread"""
+        total_videos = len(videos)
+        
+        try:
+            for i, (tree_item, file_path) in enumerate(videos):
+                # Update status
+                self.root.after(0, lambda: self.upload_status_label.config(
+                    text=f"Uploading {i+1}/{total_videos}: {os.path.basename(file_path)}"))
+                
+                # Update tree item status
+                self.root.after(0, lambda item=tree_item: self.video_tree.item(
+                    item, values=(self.video_tree.item(item)['values'][0],
+                                 self.video_tree.item(item)['values'][1], "Uploading...")))
+                
+                try:
+                    # Generate title from template
+                    filename = os.path.splitext(os.path.basename(file_path))[0]
+                    title = title_template.replace("{filename}", filename)
+                    
+                    # Upload video
+                    video_id = self.upload_single_video(file_path, title, description, privacy)
+                    
+                    if video_id:
+                        # Add to playlist if specified
+                        if playlist_id:
+                            self.add_video_to_playlist(video_id, playlist_id)
+                        
+                        # Update status to success
+                        self.root.after(0, lambda item=tree_item: self.video_tree.item(
+                            item, values=(self.video_tree.item(item)['values'][0],
+                                         self.video_tree.item(item)['values'][1], "✅ Uploaded")))
+                    else:
+                        # Update status to failed
+                        self.root.after(0, lambda item=tree_item: self.video_tree.item(
+                            item, values=(self.video_tree.item(item)['values'][0],
+                                         self.video_tree.item(item)['values'][1], "❌ Failed")))
+                    
+                except Exception as e:
+                    print(f"Error uploading {file_path}: {e}")
+                    self.root.after(0, lambda item=tree_item, err=str(e): self.video_tree.item(
+                        item, values=(self.video_tree.item(item)['values'][0],
+                                     self.video_tree.item(item)['values'][1], f"❌ Error: {err[:20]}...")))
+                
+                # Update progress
+                progress = ((i + 1) / total_videos) * 100
+                self.root.after(0, lambda p=progress: self.upload_progress.configure(value=p))
+        
+        finally:
+            # Re-enable upload button
+            self.root.after(0, lambda: self.upload_button.config(state='normal'))
+            self.root.after(0, lambda: self.upload_status_label.config(text="Upload completed"))
+
+    def upload_single_video(self, file_path, title, description, privacy_status):
+        """Upload a single video to YouTube"""
+        try:
+            # Prepare the video metadata
+            body = {
+                'snippet': {
+                    'title': title,
+                    'description': description,
+                    'categoryId': '22'  # People & Blogs category
+                },
+                'status': {
+                    'privacyStatus': privacy_status,
+                    'selfDeclaredMadeForKids': False
+                }
+            }
+            
+            # Create media upload object
+            media = MediaFileUpload(file_path, chunksize=-1, resumable=True)
+            
+            # Execute the upload
+            request = self.youtube_service.videos().insert(
+                part='snippet,status',
+                body=body,
+                media_body=media
+            )
+            
+            response = None
+            while response is None:
+                status, response = request.next_chunk()
+                if status:
+                    progress = int(status.progress() * 100)
+                    # Update progress if needed
+            
+            if 'id' in response:
+                print(f"Video uploaded successfully: {response['id']}")
+                return response['id']
+            else:
+                print("Upload failed - no video ID returned")
+                return None
+                
+        except Exception as e:
+            print(f"Upload error: {e}")
+            return None
+
+    def add_video_to_playlist(self, video_id, playlist_id):
+        """Add an uploaded video to a playlist"""
+        try:
+            body = {
+                'snippet': {
+                    'playlistId': playlist_id,
+                    'resourceId': {
+                        'kind': 'youtube#video',
+                        'videoId': video_id
+                    }
+                }
+            }
+            
+            request = self.youtube_service.playlistItems().insert(
+                part='snippet',
+                body=body
+            )
+            
+            response = request.execute()
+            print(f"Video added to playlist: {response['id']}")
+            return True
+            
+        except Exception as e:
+            print(f"Failed to add video to playlist: {e}")
+            return False
 
 def main():
     root = tk.Tk()

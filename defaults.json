@@ -77,5 +77,6 @@
   "music": "Random",
   "music_volume": 0.5232558139534884,
   "background_color": "light_gray",
-  "starting_part_number": 1
+  "starting_part_number": 1,
+  "default_youtube_channel_id": "UCgDAZ9kGH98mcoMnPOptXUw"
 }

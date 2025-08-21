@@ -1,23 +1,53 @@
-# Debug logs
-logs/
+# YouTube API Credentials and Tokens
+client_secrets.json
+youtube_token.pickle
 
-# Python cache
+# Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Virtual environment
+# Virtual Environment
 venv/
 env/
+ENV/
 
-# IDE files
+# IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/*.log
 
 # Temporary files
 *.tmp
-*.temp
+temp/
+tmp/
 
-# OS files
-.DS_Store
-Thumbs.db
+# Video output (optional - you might want to keep these)
+# *.mp4
+# *.avi
+# *.mov
