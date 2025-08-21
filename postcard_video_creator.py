@@ -1916,7 +1916,7 @@ class PostcardVideoCreator:
                         actual_part_number = self.starting_part_var.get() + batch_index
                     
                     # Always update start screen text with part number
-                    part_text = f"{original_line1} (Part {actual_part_number})"
+                    part_text = f"{original_line1} #{actual_part_number}"
                     logging.info(f"DEBUG: Updating start text to: '{part_text}' (starting from part {self.starting_part_var.get()})")
                     self.start_line1_var.set(part_text)
                     
@@ -2196,7 +2196,7 @@ class PostcardVideoCreator:
                 
                 # Always use part numbers in filename, include dimensions
                 dimensions = f"{self.video_width}x{self.video_height}"
-                output_filename = f"{timestamp}_{safe_filename}_Part{part_number}_{dimensions}.mp4"
+                output_filename = f"{timestamp}_{safe_filename}_#{part_number}_{dimensions}.mp4"
                 output_path = os.path.join(self.output_path, output_filename)
             
             logging.info(f"DEBUG: Generated filename: {output_filename} from Line1: '{line1_text}' (Part {part_number})")
@@ -8551,9 +8551,9 @@ We add ~1,000 new antique postcards to our store weekly. Follow our eBay store f
         # Replace underscores with spaces
         formatted = formatted.replace('_', ' ')
         
-        # Add space between "Part" and number (case-insensitive)
-        # Matches: Part1, part2, PART3, etc. and replaces with: Part 1, Part 2, Part 3
-        formatted = re.sub(r'\b(part)(\d+)\b', r'\1 \2', formatted, flags=re.IGNORECASE)
+        # Replace "Part" with "#" without space before number (case-insensitive)
+        # Matches: Part1, part2, PART3, etc. and replaces with: #1, #2, #3
+        formatted = re.sub(r'\b(part)\s*(\d+)\b', r'#\2', formatted, flags=re.IGNORECASE)
         
         # Clean up any multiple spaces and leading/trailing whitespace
         formatted = re.sub(r'\s+', ' ', formatted).strip()
