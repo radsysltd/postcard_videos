@@ -1,0 +1,101 @@
+Timestamp: 2025-08-21 21:30:13.897140
+Video Type: BATCH VIDEO
+
+============================================================
+DURATION ANALYSIS - BATCH VIDEO
+============================================================
+Clip 1: START CLIP = 4.00s
+Clip 2: SECOND PAGE = 11.00s
+Clip 3: GENERATED = 9.00s
+Clip 4: GENERATED = 5.10s
+Clip 5: GENERATED = 9.00s
+Clip 6: GENERATED = 5.10s
+Clip 7: GENERATED = 9.00s
+Clip 8: GENERATED = 5.10s
+Clip 9: GENERATED = 9.00s
+Clip 10: GENERATED = 5.10s
+Clip 11: GENERATED = 9.00s
+Clip 12: ENDING CLIP = 8.00s
+
+TOTAL CALCULATED: 88.40s
+============================================================
+
+FINAL VIDEO DURATION: 88.40s
+CALCULATED vs ACTUAL: 88.40s vs 88.40s
+✅ DURATION MATCH
+============================================================
+
+DETAILED CLIP INFORMATION:
+========================================
+
+Clip 1:
+  Duration: 4.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 2:
+  Duration: 11.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 3:
+  Duration: 9.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 4:
+  Duration: 5.1
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 5:
+  Duration: 9.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 6:
+  Duration: 5.1
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 7:
+  Duration: 9.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 8:
+  Duration: 5.1
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 9:
+  Duration: 9.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 10:
+  Duration: 5.1
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 11:
+  Duration: 9.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False
+
+Clip 12:
+  Duration: 8.0
+  Type: VideoClip
+  Has filename: False
+  Has make_frame: False

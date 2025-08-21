@@ -248,6 +248,12 @@ class PostcardVideoCreator:
         self.second_page_fade_in_dur_var = tk.DoubleVar(value=0.5)
         self.second_page_fade_out_dur_var = tk.DoubleVar(value=0.5)
         
+        # NEW: Actual clip duration controls (for batch calculation accuracy)
+        self.actual_start_duration_var = tk.DoubleVar(value=4.0)
+        self.actual_second_page_duration_var = tk.DoubleVar(value=11.0)
+        self.actual_ending_duration_var = tk.DoubleVar(value=8.0)
+        self.actual_pair_duration_var = tk.DoubleVar(value=14.1)
+        
         self.setup_ui()
         
         # Load saved defaults after UI is set up
@@ -277,6 +283,10 @@ class PostcardVideoCreator:
         # Settings frame
         settings_frame = ttk.LabelFrame(main_frame, text="Video Settings", padding="10")
         settings_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        # Configure column weights for better spacing
+        settings_frame.columnconfigure(1, weight=1)
+        settings_frame.columnconfigure(3, weight=1)
         
         # Duration settings
         ttk.Label(settings_frame, text="Default Duration (seconds):").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
@@ -325,38 +335,64 @@ class PostcardVideoCreator:
         preview_button = ttk.Button(settings_frame, text="🎵 Preview", command=self.preview_music)
         preview_button.grid(row=2, column=4, sticky=tk.W, pady=(10, 0), padx=(10, 0))
         
+        # Batch Duration Configuration (NEW)
+        ttk.Label(settings_frame, text="Batch Calculation Durations:", font=('Arial', 9, 'bold')).grid(row=3, column=0, columnspan=5, sticky=tk.W, pady=(20, 5))
+        
+        # Row 4: Start and Second Page durations
+        ttk.Label(settings_frame, text="Actual Start Duration:").grid(row=4, column=0, sticky=tk.W, padx=(0, 5))
+        ttk.Spinbox(settings_frame, from_=1.0, to=15.0, increment=0.5, textvariable=self.actual_start_duration_var, 
+                   width=8).grid(row=4, column=1, sticky=tk.W, padx=(0, 20))
+        
+        ttk.Label(settings_frame, text="Actual Second Page Duration:").grid(row=4, column=2, sticky=tk.W, padx=(0, 5))
+        ttk.Spinbox(settings_frame, from_=1.0, to=20.0, increment=0.5, textvariable=self.actual_second_page_duration_var, 
+                   width=8).grid(row=4, column=3, sticky=tk.W)
+        
+        # Row 5: Ending and Pair durations
+        ttk.Label(settings_frame, text="Actual Ending Duration:").grid(row=5, column=0, sticky=tk.W, padx=(0, 5), pady=(5, 0))
+        ttk.Spinbox(settings_frame, from_=1.0, to=15.0, increment=0.5, textvariable=self.actual_ending_duration_var, 
+                   width=8).grid(row=5, column=1, sticky=tk.W, padx=(0, 20), pady=(5, 0))
+        
+        ttk.Label(settings_frame, text="Actual Pair Duration:").grid(row=5, column=2, sticky=tk.W, padx=(0, 5), pady=(5, 0))
+        ttk.Spinbox(settings_frame, from_=5.0, to=30.0, increment=0.1, textvariable=self.actual_pair_duration_var, 
+                   width=8).grid(row=5, column=3, sticky=tk.W, pady=(5, 0))
+        
+        # Help text (more compact)
+        help_label = ttk.Label(settings_frame, text="ℹ️ Actual durations for 60s batch splitting", 
+                              font=('Arial', 8), foreground='#666666')
+        help_label.grid(row=6, column=0, columnspan=4, sticky=tk.W, pady=(2, 5))
+        
         # Music management button
         music_manage_button = ttk.Button(settings_frame, text="🎼 Manage Music", command=self.open_music_manager)
         music_manage_button.grid(row=2, column=5, sticky=tk.W, pady=(10, 0), padx=(10, 0))
         
-        # Background color for square format
-        ttk.Label(settings_frame, text="Square Background:").grid(row=3, column=0, sticky=tk.W, pady=(10, 0))
+        # Background color for square format (MOVED TO ROW 7)
+        ttk.Label(settings_frame, text="Square Background:").grid(row=7, column=0, sticky=tk.W, pady=(15, 0))
         background_color_combo = ttk.Combobox(settings_frame, textvariable=self.background_color_var,
                                             values=["white", "black", "gray", "light_gray", "dark_gray", 
                                                    "red", "green", "blue", "yellow", "cyan", "magenta", 
                                                    "orange", "purple", "brown", "pink", "navy"], width=15)
-        background_color_combo.grid(row=3, column=1, sticky=tk.W, pady=(10, 0), padx=(0, 20))
+        background_color_combo.grid(row=7, column=1, sticky=tk.W, pady=(15, 0), padx=(0, 20))
         
-        # Starting part number setting
-        ttk.Label(settings_frame, text="Starting Part Number:").grid(row=3, column=2, sticky=tk.W, pady=(10, 0), padx=(20, 0))
+        # Starting part number setting (MOVED TO ROW 7)
+        ttk.Label(settings_frame, text="Starting Part Number:").grid(row=7, column=2, sticky=tk.W, pady=(15, 0), padx=(20, 0))
         starting_part_spinbox = ttk.Spinbox(settings_frame, from_=1, to=999, textvariable=self.starting_part_var, width=8)
-        starting_part_spinbox.grid(row=3, column=3, sticky=tk.W, pady=(10, 0), padx=(0, 10))
+        starting_part_spinbox.grid(row=7, column=3, sticky=tk.W, pady=(15, 0), padx=(0, 10))
         
-        # Ending text configuration button
+        # Ending text configuration button (MOVED TO ROW 8)
         ending_config_button = ttk.Button(settings_frame, text="🎬 Configure Ending Text", command=self.open_ending_config)
-        ending_config_button.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
+        ending_config_button.grid(row=8, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
         
-        # Start text configuration button
+        # Start text configuration button (MOVED TO ROW 8)
         start_config_button = ttk.Button(settings_frame, text="🎬 Configure Start Text", command=self.open_start_config)
-        start_config_button.grid(row=4, column=2, columnspan=2, sticky=tk.W, pady=(10, 0))
+        start_config_button.grid(row=8, column=2, columnspan=2, sticky=tk.W, pady=(10, 0))
         
-        # Second page configuration button
+        # Second page configuration button (MOVED TO ROW 9)
         second_page_config_button = ttk.Button(settings_frame, text="📄 Configure Second Page", command=self.open_second_page_config)
-        second_page_config_button.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
+        second_page_config_button.grid(row=9, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
         
-        # YouTube upload button
+        # YouTube upload button (MOVED TO ROW 9)
         youtube_upload_button = ttk.Button(settings_frame, text="📺 Upload to YouTube", command=self.open_youtube_upload)
-        youtube_upload_button.grid(row=5, column=2, columnspan=2, sticky=tk.W, pady=(10, 0))
+        youtube_upload_button.grid(row=9, column=2, columnspan=2, sticky=tk.W, pady=(10, 0))
         
         # File selection frame
         file_frame = ttk.LabelFrame(main_frame, text="Postcard Images", padding="10")
@@ -1398,6 +1434,28 @@ class PostcardVideoCreator:
         if len(included_images) % 2 != 0:
             messagebox.showerror("Error", f"You have {len(included_images)} images selected. Please select an even number of images.\n\nYou need pairs: front and back images for each postcard.")
             return
+        
+        # Validate total duration for royalty-free music compliance (60-second limit)
+        start_duration = self.start_duration_var.get()
+        second_page_duration = self.second_page_duration_var.get() if self.second_page_enabled_var.get() else 0
+        ending_duration = self.ending_duration_var.get()
+        overhead_duration = start_duration + second_page_duration + ending_duration
+        
+        if overhead_duration >= 60.0:
+            messagebox.showerror("Duration Error", 
+                f"Start/Second Page/Ending clips total {overhead_duration:.1f} seconds.\n\n"
+                f"This exceeds the 60-second limit for royalty-free music!\n\n"
+                f"Please reduce clip durations in their respective configuration dialogs.")
+            return
+        
+        if overhead_duration > 45.0:  # Warning if overhead is very high
+            result = messagebox.askyesno("High Overhead Warning",
+                f"Start/Second Page/Ending clips total {overhead_duration:.1f} seconds.\n\n"
+                f"This leaves only {60.0 - overhead_duration:.1f} seconds for postcard content.\n\n"
+                f"Consider reducing clip durations for more postcard content.\n\n"
+                f"Continue anyway?")
+            if not result:
+                return
             
         if len(self.postcard_images) % 2 != 0:
             print("DEBUG: Odd number of images")  # Debug output
@@ -1418,7 +1476,7 @@ class PostcardVideoCreator:
             # Multiple videos needed
             result = messagebox.askyesno("Multiple Videos", 
                 f"Your content is {self.calculate_total_postcard_duration():.1f} seconds long.\n\n"
-                f"This will be split into {len(batches)} videos of approximately 60 seconds each.\n\n"
+                f"This will be split into {len(batches)} videos of ≤60 seconds each (for royalty-free music compliance).\n\n"
                 f"Do you want to proceed with batch creation?")
             if not result:
                 return
@@ -1440,9 +1498,49 @@ class PostcardVideoCreator:
         return sum(included_durations)
     
     def calculate_video_batches(self):
-        """Split included postcards into batches of approximately 60 seconds each, with minimum 5 pairs per batch"""
-        max_duration_per_video = 60.0  # Maximum seconds of postcard content per video
-        min_pairs_per_video = 5  # Minimum number of postcard pairs per video
+        """Split included postcards into batches to ensure total video duration ≤ 60 seconds (for royalty-free music)"""
+        # Calculate overhead from start/second page/ending clips using CONFIGURABLE durations
+        start_duration = self.actual_start_duration_var.get()
+        second_page_duration = self.actual_second_page_duration_var.get() if self.second_page_enabled_var.get() else 0
+        ending_duration = self.actual_ending_duration_var.get()
+        
+        overhead_duration = start_duration + second_page_duration + ending_duration
+        
+        print(f"DEBUG: Using CONFIGURED actual durations - Start: {start_duration}s, Second Page: {second_page_duration}s, Ending: {ending_duration}s")
+        
+        # Maximum total video duration for royalty-free music compliance
+        max_total_video_duration = 60.0
+        
+        # Calculate maximum duration available for postcard content
+        max_duration_per_video = max_total_video_duration - overhead_duration
+        
+        # Ensure we have at least some time for postcards
+        if max_duration_per_video <= 0:
+            raise ValueError(f"Start/Second Page/Ending clips total {overhead_duration:.1f}s, leaving no time for postcards! Reduce clip durations.")
+        
+        # Get transition duration early for calculations
+        transition_duration = float(self.transition_duration_var.get())
+        
+        # Calculate minimum pairs per video, but ensure it doesn't exceed duration limit
+        min_pairs_per_video = 5  # Preferred minimum number of postcard pairs per video
+        
+        # Check if minimum pairs would exceed duration limit  
+        test_pair_duration = self.actual_pair_duration_var.get()  # Configurable pair duration
+        min_pairs_content_duration = min_pairs_per_video * test_pair_duration
+        min_pairs_total_duration = min_pairs_content_duration + overhead_duration
+        
+        if min_pairs_total_duration > max_total_video_duration:
+            # Reduce minimum pairs to fit within duration limit
+            max_possible_pairs = int(max_duration_per_video / test_pair_duration)
+            min_pairs_per_video = max(1, max_possible_pairs)
+            print(f"WARNING: Reduced minimum pairs from 5 to {min_pairs_per_video} to stay within 60s limit")
+            print(f"WARNING: Each video may have fewer postcards to ensure royalty-free music compliance")
+        
+        print(f"DEBUG: Minimum pairs per video: {min_pairs_per_video} (duration limit enforced)")
+        
+        print(f"DEBUG: Total video duration limit: {max_total_video_duration}s")
+        print(f"DEBUG: Overhead (start + second page + ending): {overhead_duration:.1f}s")
+        print(f"DEBUG: Available for postcard content: {max_duration_per_video:.1f}s")
         
         # Get only included images and their indices
         included_images, included_durations = self.get_included_images()
@@ -1452,16 +1550,19 @@ class PostcardVideoCreator:
         total_duration = sum(included_durations)
         
         logging.info(f"BATCHING: Total pairs: {total_pairs}, Total duration: {total_duration:.1f}s")
-        logging.info(f"BATCHING: Max duration per video: {max_duration_per_video}s, Min pairs per video: {min_pairs_per_video}")
-        print(f"Calculating video batches for {total_pairs} pairs ({total_duration:.1f}s total) - check log for details")
+        logging.info(f"BATCHING: Max postcard duration per video: {max_duration_per_video:.1f}s (after {overhead_duration:.1f}s overhead)")
+        logging.info(f"BATCHING: Min pairs per video: {min_pairs_per_video}")
+        print(f"Calculating video batches for {total_pairs} pairs ({total_duration:.1f}s total)")
+        print(f"Each video will be ≤{max_total_video_duration}s total ({max_duration_per_video:.1f}s postcards + {overhead_duration:.1f}s clips)")
         
         # If we have fewer than minimum pairs total, return single batch
         if total_pairs < min_pairs_per_video:
             logging.info(f"BATCHING: Only {total_pairs} pairs total (< {min_pairs_per_video}), creating single video")
             return [included_indices]
         
-        # Calculate durations for each included pair
+        # Calculate durations for each included pair INCLUDING transitions
         pair_durations = []
+        
         for i in range(0, len(included_indices), 2):
             if i + 1 >= len(included_indices):
                 break
@@ -1469,12 +1570,36 @@ class PostcardVideoCreator:
             back_idx = included_indices[i + 1]
             front_duration = self.image_durations[front_idx]
             back_duration = self.image_durations[back_idx]
-            pair_durations.append(front_duration + back_duration)
+            
+            # Use configurable pair duration (includes all clips per pair)
+            # Note: This total duration includes transition + back clip as determined from log analysis
+            total_pair_duration = self.actual_pair_duration_var.get()
+            
+            pair_durations.append(total_pair_duration)
+        
+        print(f"DEBUG: Including transition duration of {transition_duration}s between pairs")
+        print(f"DEBUG: Pair durations (including transitions): {[f'{d:.1f}s' for d in pair_durations]}")
         
         logging.info(f"BATCHING: Processing {len(pair_durations)} pairs with durations: {[f'{d:.1f}s' for d in pair_durations]}")
         
         # Use smart batching algorithm for balanced distribution
         batches = self._create_balanced_batches(included_indices, pair_durations, max_duration_per_video, min_pairs_per_video)
+        
+        # Adjust batch durations: subtract the final transition from each batch
+        # (since the last pair in each batch doesn't transition to another pair)
+        print(f"DEBUG: Adjusting batch durations (removing final transition from each batch):")
+        for i, batch_indices in enumerate(batches):
+            batch_pairs = len(batch_indices) // 2
+            if batch_pairs > 0:
+                # Calculate actual duration for this batch
+                batch_duration = 0
+                for j in range(batch_pairs):
+                    pair_idx = j
+                    if pair_idx < len(pair_durations):
+                        batch_duration += pair_durations[pair_idx]
+                # Subtract the final transition (last pair doesn't transition)
+                actual_batch_duration = batch_duration - transition_duration
+                print(f"DEBUG: Batch {i+1}: {batch_pairs} pairs, {actual_batch_duration:.1f}s content + {overhead_duration:.1f}s overhead = {actual_batch_duration + overhead_duration:.1f}s total")
         
         logging.info(f"BATCHING: Created {len(batches)} batches before post-processing")
         
@@ -1870,7 +1995,7 @@ class PostcardVideoCreator:
             
             # Add start clip
             self.root.after(0, lambda: self.status_label.config(text="Creating start clip..."))
-            start_duration = self.start_duration_var.get()
+            start_duration = self.actual_start_duration_var.get()  # Use configurable actual duration
             
             # Apply the same fade logic as the original process_video method
             # Don't apply fade-out to start clip if we're creating a manual transition, but DO apply if second page is enabled
@@ -1892,8 +2017,9 @@ class PostcardVideoCreator:
             # Add second page clip if enabled
             if self.second_page_enabled_var.get():
                 self.root.after(0, lambda: self.status_label.config(text="Creating second page clip..."))
-                second_page_duration = self.second_page_duration_var.get()
-                logging.info(f"DEBUG: Creating second page clip with duration {second_page_duration}s")
+                second_page_duration = self.actual_second_page_duration_var.get()  # Use configurable actual duration
+                logging.info(f"DEBUG: Creating second page clip with ACTUAL duration {second_page_duration}s")
+
                 second_page_clip = self.create_second_page_clip(duration=second_page_duration)
                 if second_page_clip is None:
                     logging.warning("Failed to create second page clip, skipping...")
@@ -1912,11 +2038,25 @@ class PostcardVideoCreator:
                 
                 front_path = self.postcard_images[front_idx]
                 back_path = self.postcard_images[back_idx]
-                front_duration = self.image_durations[front_idx]
-                back_duration = self.image_durations[back_idx]
+                
+                # Calculate durations from configurable pair duration
+                total_pair_duration = self.actual_pair_duration_var.get()
+                transition_duration = float(self.transition_duration_var.get())
+                
+                # Distribute pair duration: include inter-pair transition in the budget
+                # If this is not the last pair, reserve time for transition to next pair
+                is_last_pair = i >= len(batch_indices) - 2
+                inter_pair_transition_time = 0 if is_last_pair else transition_duration
+                
+                # Available time for front/back after reserving for transitions
+                content_duration = total_pair_duration - transition_duration - inter_pair_transition_time
+                front_duration = content_duration * 0.6  # 60% of remaining for front
+                back_duration = content_duration * 0.4   # 40% of remaining for back
+                
+
                 
                 logging.info(f"DEBUG: Processing pair {i//2 + 1}, front: {front_path}, back: {back_path}")
-                logging.info(f"DEBUG: Durations - front: {front_duration}s, back: {back_duration}s")
+                logging.info(f"DEBUG: ACTUAL durations (from {total_pair_duration}s total) - front: {front_duration}s, back: {back_duration}s, transition: {transition_duration}s")
                 
                 # Create clips
                 logging.info(f"DEBUG: Creating front clip...")
@@ -1979,26 +2119,29 @@ class PostcardVideoCreator:
                     elif crossfade_was_created:
                         logging.info(f"DEBUG: Skipping front clip removal - crossfade already includes it")
                     
-                    transition = self.create_transition(front_clip, back_clip)
-                    logging.info(f"DEBUG: Transition clip created with duration: {transition.duration}s")
-                    clips.append(transition)  # Transition already includes both front and back clips
-                    logging.info(f"DEBUG: Added transition clip (includes both front and back)")
+                    # Create enhanced transition that includes next postcard preview if available
+                    if not is_last_pair:
+                        next_front_idx = batch_indices[i + 2]
+                        next_front_path = self.postcard_images[next_front_idx]
+                        next_front_preview = self.create_image_clip(next_front_path, inter_pair_transition_time)
+                        transition = self.create_enhanced_pair_transition(front_clip, back_clip, next_front_preview, total_pair_duration)
+                        logging.info(f"DEBUG: Enhanced transition clip created with next preview, duration: {transition.duration}s")
+                    else:
+                        transition = self.create_transition(front_clip, back_clip)
+                        logging.info(f"DEBUG: Standard transition clip created (last pair), duration: {transition.duration}s")
+                    
+                    clips.append(transition)  # Transition includes front, back, and optionally next preview
+                    logging.info(f"DEBUG: Added transition clip")
                 else:
                     clips.append(back_clip)
                     logging.info(f"DEBUG: Added back clip directly (no transition)")
                 
-                # Add transition to next postcard (except for last one)
-                if i < len(batch_indices) - 2:
-                    next_front_idx = batch_indices[i + 2]
-                    next_front_path = self.postcard_images[next_front_idx]
-                    next_front_clip = self.create_image_clip(next_front_path, 0.1)
-                    transition = self.create_transition(back_clip, next_front_clip)
-                    clips.append(transition)
+                # Inter-pair smooth transition will be handled within the main pair transition above
             
             # Add ending clip
             self.root.after(0, lambda: self.status_label.config(text="Adding ending clip..."))
-            ending_duration = self.ending_duration_var.get()
-            logging.info(f"DEBUG: Creating ending clip with duration {ending_duration}s")
+            ending_duration = self.actual_ending_duration_var.get()  # Use configurable actual duration
+            logging.info(f"DEBUG: Creating ending clip with ACTUAL duration {ending_duration}s")
             ending_clip = self.create_ending_clip(duration=ending_duration)
             if ending_clip is None:
                 raise Exception("Failed to create ending clip")
@@ -2008,18 +2151,8 @@ class PostcardVideoCreator:
             # Concatenate clips
             self.root.after(0, lambda: self.status_label.config(text="Concatenating clips..."))
             logging.info(f"DEBUG: About to concatenate {len(clips)} clips for batch video")
-            # Debug: Log each clip type and duration
-            for idx, clip in enumerate(clips):
-                clip_type = "unknown"
-                if hasattr(clip, 'filename') and clip.filename:
-                    clip_type = f"image: {os.path.basename(clip.filename)}"
-                elif hasattr(clip, 'make_frame'):
-                    clip_type = "custom/transition"
-                else:
-                    clip_type = "generated"
-                logging.info(f"DEBUG: Clip {idx}: {clip_type}, duration={getattr(clip, 'duration', 'unknown')}")
-            final_video = concatenate_videoclips(clips, method="compose")
-            logging.info(f"DEBUG: Clips concatenated successfully for batch video")
+            # DURATION ANALYSIS: Log each clip type and duration
+            final_video = self._write_duration_analysis(clips, "BATCH VIDEO")
             
             # Get line1_text for logging regardless of regeneration
             line1_text = original_title if original_title else self.start_line1_var.get()
@@ -2261,7 +2394,7 @@ class PostcardVideoCreator:
             
             # Add start clip with logo and text
             self.root.after(0, lambda: self.status_label.config(text="Creating start clip..."))
-            start_duration = self.start_duration_var.get()
+            start_duration = self.actual_start_duration_var.get()  # Use configurable actual duration
             # Don't apply fade-out to start clip if we're creating a manual transition
             # Apply fade-out if: start_fade_out enabled OR second page enabled (for smooth transition)
             will_create_manual_transition = len(self.postcard_images) > 0 and self.start_fade_out_var.get()
@@ -2278,8 +2411,9 @@ class PostcardVideoCreator:
             # Add second page clip if enabled
             if self.second_page_enabled_var.get():
                 self.root.after(0, lambda: self.status_label.config(text="Creating second page clip..."))
-                second_page_duration = self.second_page_duration_var.get()
-                print(f"DEBUG: Creating second page clip with duration {second_page_duration}s")
+                second_page_duration = self.actual_second_page_duration_var.get()  # Use configurable actual duration
+                print(f"DEBUG: Creating second page clip with ACTUAL duration {second_page_duration}s")
+
                 second_page_clip = self.create_second_page_clip(duration=second_page_duration)
                 if second_page_clip is None:
                     print("WARNING: Failed to create second page clip, skipping...")
@@ -2301,8 +2435,22 @@ class PostcardVideoCreator:
                 # Get front and back images
                 front_path = self.postcard_images[i]
                 back_path = self.postcard_images[i + 1]
-                front_duration = self.image_durations[i]
-                back_duration = self.image_durations[i + 1]
+                
+                # Calculate durations from configurable pair duration
+                total_pair_duration = self.actual_pair_duration_var.get()
+                transition_duration = float(self.transition_duration_var.get())
+                
+                # Distribute pair duration: include inter-pair transition in the budget
+                # If this is not the last pair, reserve time for transition to next pair
+                is_last_pair = i >= total_images - 2
+                inter_pair_transition_time = 0 if is_last_pair else transition_duration
+                
+                # Available time for front/back after reserving for transitions
+                content_duration = total_pair_duration - transition_duration - inter_pair_transition_time
+                front_duration = content_duration * 0.6  # 60% of remaining for front
+                back_duration = content_duration * 0.4   # 40% of remaining for back
+                
+
                 
                 # Create front clip
                 print(f"DEBUG: Creating front clip for {front_path}")
@@ -2361,25 +2509,28 @@ class PostcardVideoCreator:
                     elif crossfade_was_created:
                         print(f"DEBUG: Skipping front clip removal - crossfade already includes it")
                     
-                    transition = self.create_transition(front_clip, back_clip)
-                    print(f"DEBUG: Transition clip created with duration: {transition.duration}s")
-                    clips.append(transition)  # Transition already includes both front and back clips
-                    print(f"DEBUG: Added transition clip (includes both front and back)")
+                    # Create enhanced transition that includes next postcard preview if available
+                    if not is_last_pair:
+                        next_front_path = self.postcard_images[i + 2]
+                        next_front_preview = self.create_image_clip(next_front_path, inter_pair_transition_time)
+                        transition = self.create_enhanced_pair_transition(front_clip, back_clip, next_front_preview, total_pair_duration)
+                        print(f"DEBUG: Enhanced transition clip created with next preview, duration: {transition.duration}s")
+                    else:
+                        transition = self.create_transition(front_clip, back_clip)
+                        print(f"DEBUG: Standard transition clip created (last pair), duration: {transition.duration}s")
+                    
+                    clips.append(transition)  # Transition includes front, back, and optionally next preview
+                    print(f"DEBUG: Added transition clip")
                 else:
                     clips.append(back_clip)
                     print(f"DEBUG: Added back clip directly (no transition)")
                 
-                # Add transition to next postcard (except for last one)
-                if i < total_images - 2:
-                    next_front_path = self.postcard_images[i + 2]
-                    next_front_clip = self.create_image_clip(next_front_path, 0.1)  # Short clip for transition
-                    transition = self.create_transition(back_clip, next_front_clip)
-                    clips.append(transition)
+                # Inter-pair smooth transition will be handled within the main pair transition above
             
             # Add ending clip
             self.root.after(0, lambda: self.status_label.config(text="Adding ending clip..."))
-            ending_duration = self.ending_duration_var.get()
-            print(f"DEBUG: Creating ending clip...")
+            ending_duration = self.actual_ending_duration_var.get()  # Use configurable actual duration
+            print(f"DEBUG: Creating ending clip with ACTUAL duration {ending_duration}s...")
             ending_clip = self.create_ending_clip(duration=ending_duration)
             if ending_clip is None:
                 raise Exception("Failed to create ending clip")
@@ -2390,8 +2541,9 @@ class PostcardVideoCreator:
             self.root.after(0, lambda: self.status_label.config(text="Concatenating clips..."))
             self.root.after(0, lambda: self.progress_var.set(85))
             print(f"DEBUG: About to concatenate {len(clips)} clips")
-            final_video = concatenate_videoclips(clips, method="compose")
-            print(f"DEBUG: Clips concatenated successfully")
+            
+            # DURATION ANALYSIS: Log each clip type and duration
+            final_video = self._write_duration_analysis(clips, "SINGLE VIDEO")
             
             # Update progress for video writing
             self.root.after(0, lambda: self.status_label.config(text="Writing video file..."))
@@ -2706,6 +2858,59 @@ class PostcardVideoCreator:
             # Default fade
             return self.create_fade_transition(clip1, clip2)
     
+    def create_enhanced_pair_transition(self, front_clip, back_clip, next_front_clip, total_duration):
+        """Create a pair transition that includes preview of next postcard within fixed duration"""
+        transition_duration = float(self.transition_duration_var.get())
+        
+        def make_frame(t):
+            # Phase 1: Show front clip (0 to front_duration)
+            if t < front_clip.duration:
+                return front_clip.get_frame(t)
+            
+            # Phase 2: Transition from front to back (front_duration to front_duration + transition_duration)
+            elif t < front_clip.duration + transition_duration:
+                transition_progress = (t - front_clip.duration) / transition_duration
+                front_frame = front_clip.get_frame(min(front_clip.duration - 0.001, front_clip.duration - 1/30))
+                back_frame = back_clip.get_frame(0)
+                
+                # Ensure frames are compatible
+                front_frame = np.array(front_frame, dtype=np.float32)
+                back_frame = np.array(back_frame, dtype=np.float32)
+                
+                if front_frame.shape != back_frame.shape:
+                    import cv2
+                    back_frame = cv2.resize(back_frame, (front_frame.shape[1], front_frame.shape[0]))
+                
+                blended_frame = front_frame * (1 - transition_progress) + back_frame * transition_progress
+                return np.clip(blended_frame, 0, 255).astype('uint8')
+            
+            # Phase 3: Show back clip (until near end)
+            elif t < total_duration - transition_duration:
+                back_time = t - front_clip.duration - transition_duration
+                back_time = min(back_time, back_clip.duration - 0.001)
+                return back_clip.get_frame(back_time)
+            
+            # Phase 4: Preview transition to next postcard (last transition_duration seconds)
+            else:
+                preview_progress = (t - (total_duration - transition_duration)) / transition_duration
+                back_frame = back_clip.get_frame(min(back_clip.duration - 0.001, back_clip.duration - 1/30))
+                next_frame = next_front_clip.get_frame(0)
+                
+                # Ensure frames are compatible
+                back_frame = np.array(back_frame, dtype=np.float32)
+                next_frame = np.array(next_frame, dtype=np.float32)
+                
+                if back_frame.shape != next_frame.shape:
+                    import cv2
+                    next_frame = cv2.resize(next_frame, (back_frame.shape[1], back_frame.shape[0]))
+                
+                blended_frame = back_frame * (1 - preview_progress) + next_frame * preview_progress
+                return np.clip(blended_frame, 0, 255).astype('uint8')
+        
+        enhanced_transition = VideoClip(make_frame, duration=total_duration)
+        logging.info(f"DEBUG: Enhanced pair transition created: front ({front_clip.duration}s) → back → next preview, total: {total_duration}s")
+        return enhanced_transition
+
     def create_fade_transition(self, clip1, clip2):
         """Create a fade transition between two clips"""
         # Create a custom clip that shows the first clip, then fades to the second
@@ -4009,6 +4214,13 @@ class PostcardVideoCreator:
                 "second_page_fade_out": self.second_page_fade_out_var.get(),
                 "second_page_fade_in_dur": self.second_page_fade_in_dur_var.get(),
                 "second_page_fade_out_dur": self.second_page_fade_out_dur_var.get(),
+                
+                # Actual duration controls
+                "actual_start_duration": self.actual_start_duration_var.get(),
+                "actual_second_page_duration": self.actual_second_page_duration_var.get(),
+                "actual_ending_duration": self.actual_ending_duration_var.get(),
+                "actual_pair_duration": self.actual_pair_duration_var.get(),
+                
                 # Fade options
                 "start_fade_in": self.start_fade_in_var.get(),
                 "start_fade_out": self.start_fade_out_var.get(),
@@ -5321,6 +5533,13 @@ class PostcardVideoCreator:
                 "second_page_fade_out": self.second_page_fade_out_var.get(),
                 "second_page_fade_in_dur": self.second_page_fade_in_dur_var.get(),
                 "second_page_fade_out_dur": self.second_page_fade_out_dur_var.get(),
+                
+                # Actual duration controls
+                "actual_start_duration": self.actual_start_duration_var.get(),
+                "actual_second_page_duration": self.actual_second_page_duration_var.get(),
+                "actual_ending_duration": self.actual_ending_duration_var.get(),
+                "actual_pair_duration": self.actual_pair_duration_var.get(),
+                
                 # Fade options
                 "start_fade_in": self.start_fade_in_var.get(),
                 "start_fade_out": self.start_fade_out_var.get(),
@@ -5436,6 +5655,13 @@ class PostcardVideoCreator:
                 self.second_page_fade_out_var.set(defaults.get("second_page_fade_out", False))
                 self.second_page_fade_in_dur_var.set(defaults.get("second_page_fade_in_dur", 0.5))
                 self.second_page_fade_out_dur_var.set(defaults.get("second_page_fade_out_dur", 0.5))
+                
+                # Load actual duration controls
+                self.actual_start_duration_var.set(defaults.get("actual_start_duration", 4.0))
+                self.actual_second_page_duration_var.set(defaults.get("actual_second_page_duration", 11.0))
+                self.actual_ending_duration_var.set(defaults.get("actual_ending_duration", 8.0))
+                self.actual_pair_duration_var.set(defaults.get("actual_pair_duration", 14.1))
+                
                 self.ending_fade_in_var.set(defaults.get("ending_fade_in", False))
                 self.ending_fade_out_var.set(defaults.get("ending_fade_out", False))
                 self.ending_fade_in_dur_var.set(defaults.get("ending_fade_in_dur", 0.5))
@@ -6047,17 +6273,54 @@ class PostcardVideoCreator:
         
         dialog = tk.Toplevel(self.root)
         dialog.title("Upload to YouTube")
-        dialog.geometry("800x600")
+        dialog.geometry("950x800")  # Made even larger to show all content including upload button
         dialog.resizable(True, True)
+        dialog.minsize(850, 700)  # Increased minimum size
+        
+        # Store reference to dialog for layout updates
+        self.dialog = dialog
         
         # Center the dialog
         dialog.transient(self.root)
         dialog.grab_set()
         
-        main_frame = ttk.Frame(dialog, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Create a canvas and scrollbar for scrollable content
+        canvas = tk.Canvas(dialog)
+        scrollbar = ttk.Scrollbar(dialog, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Add mouse wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        def _bind_to_mousewheel(event):
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        def _unbind_from_mousewheel(event):
+            canvas.unbind_all("<MouseWheel>")
+        
+        canvas.bind('<Enter>', _bind_to_mousewheel)
+        canvas.bind('<Leave>', _unbind_from_mousewheel)
+        
+        canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
         dialog.columnconfigure(0, weight=1)
         dialog.rowconfigure(0, weight=1)
+        
+        # Use scrollable_frame as our main container
+        main_frame = ttk.Frame(scrollable_frame, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        scrollable_frame.columnconfigure(0, weight=1)
+        scrollable_frame.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
         
         # Title
@@ -6138,10 +6401,11 @@ class PostcardVideoCreator:
         video_frame = ttk.LabelFrame(main_frame, text="Select Videos", padding="10")
         video_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         video_frame.columnconfigure(0, weight=1)
+        video_frame.columnconfigure(1, weight=1)
+        video_frame.rowconfigure(2, weight=1)  # Make the video list row expandable
         main_frame.rowconfigure(2, weight=1)
         
-        # SIMPLE approach - just put buttons directly in the frame with clear layout
-        # Row 0: Big prominent buttons
+        # Row 0: Add video buttons
         self.add_videos_button = ttk.Button(video_frame, text="📁 ADD VIDEOS", command=self.add_videos_to_upload, 
                                           width=20)
         self.add_videos_button.grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
@@ -6159,10 +6423,10 @@ class PostcardVideoCreator:
                                      width=15)
         self.clear_button.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
         
-        # Video list (moved to row 3 to give buttons space)
+        # Row 2: Video list
         columns = ('File', 'Size', 'Status')
-        self.video_tree = ttk.Treeview(video_frame, columns=columns, show='headings', height=5)  # Reduced height
-        self.video_tree.grid(row=3, column=0, columnspan=4, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
+        self.video_tree = ttk.Treeview(video_frame, columns=columns, show='headings', height=4)
+        self.video_tree.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
         
         # Configure columns
         self.video_tree.heading('File', text='Video File')
@@ -6174,69 +6438,22 @@ class PostcardVideoCreator:
         
         # Scrollbar for video list
         video_scrollbar = ttk.Scrollbar(video_frame, orient=tk.VERTICAL, command=self.video_tree.yview)
-        video_scrollbar.grid(row=3, column=4, sticky=(tk.N, tk.S))  # Adjusted row to match tree
+        video_scrollbar.grid(row=2, column=2, sticky=(tk.N, tk.S), pady=(10, 0))
         self.video_tree.configure(yscrollcommand=video_scrollbar.set)
         
-        # TEMPORARY: Add video buttons here since they're not showing in Select Videos section
-        temp_video_frame = ttk.LabelFrame(main_frame, text="🎬 ADD VIDEOS HERE (TEMPORARY)", padding="10")
-        temp_video_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
+        # Bind selection event to update title/description preview
+        self.video_tree.bind('<<TreeviewSelect>>', self.on_video_selection_changed)
         
-        print("DEBUG: Creating video buttons...")
-        
-        # Try creating buttons with debug output
-        try:
-            btn1 = ttk.Button(temp_video_frame, text="📁 ADD VIDEO FILES", command=self.add_videos_to_upload, width=20)
-            btn1.grid(row=0, column=0, padx=5, pady=5)
-            print("DEBUG: Button 1 created successfully")
-            
-            btn2 = ttk.Button(temp_video_frame, text="🎬 ADD CURRENT VIDEOS", command=self.add_current_videos, width=20)
-            btn2.grid(row=0, column=1, padx=5, pady=5)
-            print("DEBUG: Button 2 created successfully")
-            
-            btn3 = ttk.Button(temp_video_frame, text="🗑️ CLEAR ALL", command=self.clear_video_list, width=15)
-            btn3.grid(row=0, column=2, padx=5, pady=5)
-            print("DEBUG: Button 3 created successfully")
-            
-            # Force frame to show content
-            temp_video_frame.update()
-            print("DEBUG: Frame updated")
-            
-        except Exception as e:
-            print(f"DEBUG: Error creating buttons: {e}")
-        
-        # Add a test label to see if ANYTHING shows up in this frame
-        test_label = ttk.Label(temp_video_frame, text="🚨 TEST - If you see this, the frame works!", foreground="red")
-        test_label.grid(row=1, column=0, columnspan=3, pady=10)
-        print("DEBUG: Test label added")
-        
-        # ALSO add the video list here so it's visible
-        video_list_label = ttk.Label(temp_video_frame, text="📋 Videos to Upload:", font=("TkDefaultFont", 10, "bold"))
-        video_list_label.grid(row=2, column=0, columnspan=3, pady=(10, 5), sticky=tk.W)
-        
-        # Create a simpler video list that should be visible
-        self.temp_video_tree = ttk.Treeview(temp_video_frame, columns=('File', 'Size', 'Status'), show='headings', height=4)
-        self.temp_video_tree.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
-        
-        # Configure columns
-        self.temp_video_tree.heading('File', text='Video File')
-        self.temp_video_tree.heading('Size', text='Size (MB)')
-        self.temp_video_tree.heading('Status', text='Status')
-        self.temp_video_tree.column('File', width=300)
-        self.temp_video_tree.column('Size', width=80)
-        self.temp_video_tree.column('Status', width=100)
-        
-        print("DEBUG: Temporary video list created")
-        
-        # Upload settings (moved to row 4)
+        # Upload settings
         settings_frame = ttk.LabelFrame(main_frame, text="Upload Settings", padding="10")
-        settings_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        settings_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         settings_frame.columnconfigure(1, weight=1)
         
         # Privacy status
         ttk.Label(settings_frame, text="Privacy:").grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
-        self.privacy_var = tk.StringVar(value="unlisted")
+        self.privacy_var = tk.StringVar(value="public")
         self.privacy_combo = ttk.Combobox(settings_frame, textvariable=self.privacy_var, 
-                                   values=["unlisted", "private", "public"], state="readonly", width=15)
+                                   values=["public", "unlisted", "private"], state="readonly", width=15)
         self.privacy_combo.grid(row=0, column=1, sticky=tk.W, pady=(0, 5))
         
         # Playlist selection
@@ -6246,9 +6463,17 @@ class PostcardVideoCreator:
                                          values=["None"], width=25)  # Reduced width to make room
         self.playlist_combo.grid(row=1, column=1, sticky=tk.W, pady=(0, 5))
         
+        # Playlist control buttons frame
+        playlist_buttons_frame = ttk.Frame(settings_frame)
+        playlist_buttons_frame.grid(row=1, column=2, padx=(5, 0))
+        
         # Refresh playlists button (with debug)
-        self.refresh_playlists_button = ttk.Button(settings_frame, text="Refresh Playlists", command=self.refresh_and_debug_playlists)
-        self.refresh_playlists_button.grid(row=1, column=2, padx=(5, 0))
+        self.refresh_playlists_button = ttk.Button(playlist_buttons_frame, text="Refresh", command=self.refresh_and_debug_playlists)
+        self.refresh_playlists_button.grid(row=0, column=0, padx=(0, 3))
+        
+        # Create new playlist button
+        self.create_playlist_button = ttk.Button(playlist_buttons_frame, text="Create New", command=self.create_new_playlist_dialog)
+        self.create_playlist_button.grid(row=0, column=1)
         
         # Playlist status label (shows which channel's playlists are displayed) - move to new row
         self.playlist_status_label = ttk.Label(settings_frame, text="", foreground="grey", font=("TkDefaultFont", 8))
@@ -6263,15 +6488,31 @@ class PostcardVideoCreator:
         # debug_playlist_button = ttk.Button(settings_frame, text="Debug Playlists", command=self.debug_playlists)
         # debug_playlist_button.grid(row=1, column=5, sticky=tk.W, padx=(10, 0))
         
-        # Title/Description template
-        ttk.Label(settings_frame, text="Title Template:").grid(row=4, column=0, sticky=tk.W, pady=(5, 0))
-        self.title_template_var = tk.StringVar(value="{filename} - Vintage Postcards")
-        title_entry = ttk.Entry(settings_frame, textvariable=self.title_template_var, width=50)
-        title_entry.grid(row=4, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
+        # Title preview
+        ttk.Label(settings_frame, text="Title Preview:").grid(row=4, column=0, sticky=tk.W, pady=(5, 0))
+        self.title_preview_var = tk.StringVar(value="(No videos selected)")
+        title_preview = ttk.Entry(settings_frame, textvariable=self.title_preview_var, width=50, state="readonly")
+        title_preview.grid(row=4, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
         
         ttk.Label(settings_frame, text="Description:").grid(row=5, column=0, sticky=(tk.W, tk.N), pady=(5, 0))
-        self.description_var = tk.StringVar(value="Vintage postcard collection featuring historical images.")
-        description_text = tk.Text(settings_frame, height=3, width=50)
+        
+        # Updated description template
+        default_description = """{title}
+
+#VintagePostcards #PostcardCollecting #AntiquePostcards
+
+Discover the charm of vintage postcards from around the world! Subscribe for weekly videos showcasing rare and beautiful postcards from our collection at Lincoln Rare Books and Collectables. Our online store boasts one of the largest vintage postcard selections, with tens of thousands available for purchase. This channel features just a glimpse of our inventory—perfect for postcard collecting enthusiasts!
+
+🔗 Postcard Department: https://tiny.cc/z0ir001
+
+🔗 Full Store: https://tiny.cc/w0ir001
+
+We add ~1,000 new antique postcards to our store weekly. Follow our eBay store for exclusive updates, special offers, and discounts to grow your postcard collection! Share your favorite postcard stories in the comments—we love hearing from fellow collectors!
+
+#VintageEphemera #LincolnRareBooks"""
+        
+        self.description_var = tk.StringVar(value=default_description)
+        description_text = tk.Text(settings_frame, height=8, width=50)  # Increased height for longer description
         description_text.grid(row=5, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
         description_text.insert('1.0', self.description_var.get())
         self.description_text = description_text
@@ -6330,7 +6571,9 @@ class PostcardVideoCreator:
                     flow = InstalledAppFlow.from_client_secrets_file(
                         'client_secrets.json',
                         scopes=['https://www.googleapis.com/auth/youtube.upload',
-                               'https://www.googleapis.com/auth/youtube']
+                               'https://www.googleapis.com/auth/youtube',
+                               'https://www.googleapis.com/auth/youtube.readonly',
+                               'https://www.googleapis.com/auth/youtube.force-ssl']
                     )
                     creds = flow.run_local_server(port=0)
                 
@@ -6465,6 +6708,11 @@ class PostcardVideoCreator:
             # Show channel selection frame
             self.channel_frame.grid()
             
+            # Force dialog to update its layout after showing the channel frame
+            if hasattr(self, 'dialog'):
+                self.dialog.update_idletasks()  # Update layout calculations
+                self.dialog.geometry("")  # Let dialog auto-resize to fit content
+            
             # Update status and enable upload
             if len(self.youtube_channels) == 1:
                 # Single channel - auto-select
@@ -6585,13 +6833,131 @@ class PostcardVideoCreator:
                             playlist_channel_id = snippet.get('channelId', 'MISSING')
                             
                             # Look for potential matches by checking if the playlist might belong to our channel
-                            if 'postcard' in playlist_title.lower() or 'vintage' in playlist_title.lower():
+                            if ('postcard' in playlist_title.lower() or 
+                                'vintage' in playlist_title.lower() or 
+                                'test' in playlist_title.lower()):
                                 print(f"DEBUG: 🔍 Potential match found - '{playlist_title}' (channelId: {playlist_channel_id})")
+                                
+                            # SPECIAL: Look specifically for "Test Playlist"
+                            if 'test playlist' in playlist_title.lower():
+                                print(f"DEBUG: 🎯 FOUND 'Test Playlist': '{playlist_title}' (channelId: {playlist_channel_id})")
+                                print(f"DEBUG: Selected channel ID: {self.selected_channel_id}")
+                                print(f"DEBUG: Match: {playlist_channel_id == self.selected_channel_id}")
                         
                         request_debug = self.youtube_service.playlists().list_next(request_debug, response_debug)
                     
                 except Exception as mine_error:
                     print(f"DEBUG: mine=True method failed: {mine_error}")
+            
+            # Method 3: Cross-channel playlist detection - show playlists from ALL channels
+            print("DEBUG: Method 3 - Cross-channel playlist detection")
+            try:
+                request_all = self.youtube_service.playlists().list(part='snippet,status', mine=True, maxResults=50)
+                all_playlists_found = []
+                cross_channel_playlists = []
+                
+                while request_all:
+                    response_all = request_all.execute()
+                    print(f"DEBUG: Method 3 found {len(response_all.get('items', []))} total playlists")
+                    
+                    for playlist_all in response_all['items']:
+                        snippet = playlist_all.get('snippet', {})
+                        status = playlist_all.get('status', {})
+                        playlist_title = snippet.get('title', 'Unknown')
+                        playlist_channel_id = snippet.get('channelId', 'MISSING')
+                        privacy_status = status.get('privacyStatus', 'unknown')
+                        
+                        all_playlists_found.append({
+                            'title': playlist_title,
+                            'channelId': playlist_channel_id,
+                            'privacy': privacy_status,
+                            'id': playlist_all['id']
+                        })
+                        
+                        print(f"DEBUG: Playlist '{playlist_title}' - Channel: {playlist_channel_id}, Privacy: {privacy_status}")
+                        
+                        # Check for ANY playlist that might be the "Test Playlist" with broader search terms
+                        playlist_lower = playlist_title.lower()
+                        is_potential_test_playlist = (
+                            'test' in playlist_lower or
+                            'postcard' in playlist_lower or 
+                            'vintage' in playlist_lower or
+                            'video' in playlist_lower or
+                            playlist_lower in ['test playlist', 'test', 'my test', 'testing']
+                        )
+                        
+                        if is_potential_test_playlist:
+                            print(f"DEBUG: 🔍 POTENTIAL Test Playlist: '{playlist_title}', Privacy: {privacy_status}")
+                            print(f"DEBUG: Channel ID: {playlist_channel_id} vs Selected: {self.selected_channel_id}")
+                            
+                            # Find which channel this playlist belongs to
+                            owner_channel = "Unknown Channel"
+                            if hasattr(self, 'youtube_channels'):
+                                for ch in self.youtube_channels:
+                                    if ch['id'] == playlist_channel_id:
+                                        owner_channel = ch['title']
+                                        break
+                            
+                            # Add it to playlists regardless of channel (with channel identification)
+                            if playlist_channel_id == self.selected_channel_id:
+                                if (playlist_title, playlist_all['id']) not in playlists:
+                                    playlists.append((playlist_title, playlist_all['id']))
+                                    print(f"DEBUG: ✅ Added potential test playlist (same channel): {playlist_title}")
+                            else:
+                                cross_channel_name = f"{playlist_title} ({owner_channel})"
+                                if (cross_channel_name, playlist_all['id']) not in playlists:
+                                    playlists.append((cross_channel_name, playlist_all['id']))
+                                    cross_channel_playlists.append(cross_channel_name)
+                                    print(f"DEBUG: ✅ Added potential test playlist (cross-channel): {cross_channel_name}")
+                        
+                        # Special check for exact "test playlist" match
+                        if 'test playlist' in playlist_title.lower():
+                            print(f"DEBUG: 🎯 EXACT MATCH - Test Playlist! Title: '{playlist_title}', Privacy: {privacy_status}")
+                        
+                        # Also add other playlists from the user's other channels if they might be relevant
+                        if (playlist_channel_id != self.selected_channel_id and 
+                            ('postcard' in playlist_title.lower() or 'vintage' in playlist_title.lower())):
+                            owner_channel = "Unknown Channel"
+                            if hasattr(self, 'youtube_channels'):
+                                for ch in self.youtube_channels:
+                                    if ch['id'] == playlist_channel_id:
+                                        owner_channel = ch['title']
+                                        break
+                            
+                            cross_channel_name = f"{playlist_title} ({owner_channel})"
+                            if (cross_channel_name, playlist_all['id']) not in playlists:
+                                playlists.append((cross_channel_name, playlist_all['id']))
+                                cross_channel_playlists.append(cross_channel_name)
+                                print(f"DEBUG: ✅ Added relevant cross-channel playlist: {cross_channel_name}")
+                    
+                    request_all = self.youtube_service.playlists().list_next(request_all, response_all)
+                
+                print(f"DEBUG: Method 3 complete. Found {len(all_playlists_found)} total playlists")
+                if cross_channel_playlists:
+                    print(f"DEBUG: Added {len(cross_channel_playlists)} cross-channel playlists:")
+                    for cp in cross_channel_playlists:
+                        print(f"DEBUG:   - {cp}")
+                
+                # COMPREHENSIVE SUMMARY: List ALL playlists for user review
+                print(f"\n" + "="*60)
+                print(f"📋 COMPLETE PLAYLIST INVENTORY ({len(all_playlists_found)} total)")
+                print(f"="*60)
+                for i, playlist_info in enumerate(all_playlists_found, 1):
+                    print(f"{i:2d}. '{playlist_info['title']}' | Privacy: {playlist_info['privacy']} | Channel: {playlist_info['channelId']}")
+                print(f"="*60)
+                
+                # Check if "Test Playlist" exists with exact name
+                exact_test_found = any(p['title'].lower() == 'test playlist' for p in all_playlists_found)
+                if exact_test_found:
+                    print(f"✅ 'Test Playlist' (exact name) was found in the list above")
+                else:
+                    print(f"❌ 'Test Playlist' (exact name) was NOT found")
+                    print(f"❓ Please check the list above - is your test playlist named differently?")
+                    print(f"❓ Common variations: 'Test', 'Testing', 'My Test Playlist', etc.")
+                print(f"="*60 + "\n")
+                
+            except Exception as all_error:
+                print(f"DEBUG: Method 3 (cross-channel detection) failed: {all_error}")
             
             # Update combobox
             playlist_names = ["None"] + [name for name, _ in playlists]
@@ -6607,13 +6973,35 @@ class PostcardVideoCreator:
             for name, _ in playlists:
                 print(f"DEBUG: Playlist - {name}")
             
+            # Check specifically if "Test Playlist" was found
+            test_playlist_found = any('test playlist' in name.lower() for name, _ in playlists)
+            if test_playlist_found:
+                print(f"DEBUG: ✅ SUCCESS: 'Test Playlist' found and added to dropdown!")
+            else:
+                print(f"DEBUG: ❌ WARNING: 'Test Playlist' was NOT found in the final list")
+                print(f"DEBUG: This could be due to:")
+                print(f"DEBUG: - Privacy settings (unlisted playlists might need different permissions)")
+                print(f"DEBUG: - Channel ID mismatch (Brand Account vs Personal Account)")
+                print(f"DEBUG: - API permissions (might need to re-authenticate)")
+                print(f"DEBUG: - Playlist belongs to a different channel")
+            
             # Update status label to show which channel's playlists are displayed
             if hasattr(self, 'playlist_status_label') and hasattr(self, 'youtube_channels'):
                 selected_channel = next((ch for ch in self.youtube_channels if ch['id'] == self.selected_channel_id), None)
                 if selected_channel:
+                    # Count cross-channel playlists
+                    cross_channel_count = sum(1 for name, _ in playlists if '(' in name and ')' in name)
+                    same_channel_count = len(playlists) - cross_channel_count
+                    
                     if len(playlists) == 0:
                         status_text = f"No playlists found for {selected_channel['title']} - create them in YouTube Studio"
                         self.playlist_status_label.config(text=status_text, foreground="orange")
+                    elif cross_channel_count > 0:
+                        if same_channel_count > 0:
+                            status_text = f"Showing {same_channel_count} playlists for {selected_channel['title']} + {cross_channel_count} from other channels"
+                        else:
+                            status_text = f"Showing {cross_channel_count} playlists from your other channels (none found for {selected_channel['title']})"
+                        self.playlist_status_label.config(text=status_text, foreground="blue")
                     else:
                         status_text = f"Showing {len(playlists)} playlists for {selected_channel['title']}"
                         self.playlist_status_label.config(text=status_text, foreground="grey")
@@ -6655,6 +7043,413 @@ class PostcardVideoCreator:
                 if hasattr(self, 'playlist_status_label'):
                     self.playlist_status_label.config(text="Failed to load playlists")
                 messagebox.showerror("Playlist Error", f"Failed to fetch playlists:\n{str(fallback_error)}")
+
+    def create_new_playlist_dialog(self):
+        """Show dialog to create a new playlist"""
+        if not self.youtube_service:
+            messagebox.showerror("Error", "Please authenticate with YouTube first")
+            return
+        
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Create New Playlist")
+        dialog.geometry("400x350")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
+        
+        # Title
+        ttk.Label(main_frame, text="Create New YouTube Playlist", font=("TkDefaultFont", 12, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 20))
+        
+        # Playlist name
+        ttk.Label(main_frame, text="Playlist Name:").grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
+        name_var = tk.StringVar(value="Test Playlist")
+        name_entry = ttk.Entry(main_frame, textvariable=name_var, width=30)
+        name_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=(0, 5))
+        name_entry.focus()
+        
+        # Description
+        ttk.Label(main_frame, text="Description:").grid(row=2, column=0, sticky=(tk.W, tk.N), pady=(0, 5))
+        desc_entry = tk.Text(main_frame, width=30, height=3)
+        desc_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=(0, 5))
+        desc_entry.insert(tk.END, "Playlist created by Postcard Video Creator")
+        
+        # Privacy (always default to public for Brand Accounts)
+        ttk.Label(main_frame, text="Privacy:").grid(row=3, column=0, sticky=tk.W, pady=(0, 5))
+        
+        # Always default to public since Brand Account playlists need to be public to appear in the app
+        privacy_var = tk.StringVar(value="public")
+        privacy_combo = ttk.Combobox(main_frame, textvariable=privacy_var, 
+                                   values=["public", "unlisted", "private"], state="readonly", width=15)
+        privacy_combo.grid(row=3, column=1, sticky=tk.W, pady=(0, 5))
+        
+        # Add explanatory note about public requirement
+        privacy_note = ttk.Label(main_frame, 
+                               text="Note: Brand Account playlists must be 'public' to appear in this app", 
+                               foreground="blue", font=("TkDefaultFont", 8))
+        privacy_note.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
+        
+        # Selected channel info
+        channel_info_row = 5  # Adjust row based on whether privacy note was added
+        if hasattr(self, 'selected_channel_id') and hasattr(self, 'youtube_channels'):
+            selected_channel = next((ch for ch in self.youtube_channels if ch['id'] == self.selected_channel_id), None)
+            if selected_channel:
+                channel_info = f"Will be created on: {selected_channel['title']}"
+                ttk.Label(main_frame, text=channel_info, foreground="green", font=("TkDefaultFont", 8)).grid(row=channel_info_row, column=0, columnspan=2, pady=(10, 0))
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=6, column=0, columnspan=2, pady=(20, 0))
+        
+        def create_playlist_action():
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showerror("Error", "Please enter a playlist name")
+                return
+            
+            description = desc_entry.get(1.0, tk.END).strip()
+            privacy = privacy_var.get()
+            
+            # Update the existing create_playlist function to accept privacy
+            playlist_id = self.create_playlist_with_privacy(name, description, privacy)
+            if playlist_id:
+                # Check if playlist was created on the correct channel
+                self.refresh_playlists()  # Refresh first to get updated info
+                
+                # Check if the playlist appears in the selected channel or cross-channel
+                playlist_found_on_selected = False
+                if hasattr(self, 'playlist_mapping'):
+                    for playlist_name_in_list, _ in self.playlist_mapping.items():
+                        if name in playlist_name_in_list and '(' not in playlist_name_in_list:
+                            playlist_found_on_selected = True
+                            break
+                
+                if playlist_found_on_selected:
+                    selected_channel_name = "the selected channel"
+                    if hasattr(self, 'youtube_channels') and hasattr(self, 'selected_channel_id'):
+                        selected_channel = next((ch for ch in self.youtube_channels if ch['id'] == self.selected_channel_id), None)
+                        if selected_channel:
+                            selected_channel_name = selected_channel['title']
+                    messagebox.showinfo("Success", f"Playlist '{name}' created successfully on {selected_channel_name}!")
+                else:
+                    # Show Brand Account workaround dialog (handles dialog cleanup)
+                    self._show_brand_account_workaround_dialog(name, dialog)
+                    return  # Don't destroy dialog here, workaround dialog handles it
+                
+                dialog.destroy()
+            else:
+                messagebox.showerror("Error", "Failed to create playlist. Check console for details.")
+        
+        def cancel():
+            dialog.destroy()
+        
+        ttk.Button(button_frame, text="Create Playlist", command=create_playlist_action).grid(row=0, column=0, padx=(0, 10))
+        ttk.Button(button_frame, text="Cancel", command=cancel).grid(row=0, column=1)
+
+    def create_playlist_with_privacy(self, playlist_name, description, privacy_status):
+        """Create a new playlist with custom privacy and description on the selected channel"""
+        try:
+            # Check if we have a selected channel
+            if not hasattr(self, 'selected_channel_id') or not self.selected_channel_id:
+                print(f"ERROR: No channel selected for playlist creation")
+                return None
+                
+            print(f"DEBUG: Creating playlist '{playlist_name}' with privacy '{privacy_status}' on channel {self.selected_channel_id}")
+            
+            # Method 1: Try to use channel-specific authentication context
+            success = False
+            playlist_id = None
+            
+            try:
+                print(f"DEBUG: Method 1 - Attempting channel context switching...")
+                
+                # Build YouTube service with channel-specific context
+                channel_service = self._build_channel_specific_service(self.selected_channel_id)
+                
+                if channel_service:
+                    # Create playlist request body (without channelId in snippet)
+                    playlist_body = {
+                        'snippet': {
+                            'title': playlist_name,
+                            'description': description,
+                            'defaultLanguage': 'en'
+                        },
+                        'status': {
+                            'privacyStatus': privacy_status
+                        }
+                    }
+                    
+                    request = channel_service.playlists().insert(
+                        part='snippet,status',
+                        body=playlist_body
+                    )
+                    response = request.execute()
+                    playlist_id = response['id']
+                    created_channel_id = response.get('snippet', {}).get('channelId', 'unknown')
+                    
+                    if created_channel_id == self.selected_channel_id:
+                        print(f"✅ SUCCESS: Method 1 worked! Playlist created on correct channel {created_channel_id}")
+                        success = True
+                    else:
+                        print(f"⚠️ Method 1: Playlist created on {created_channel_id} instead of {self.selected_channel_id}")
+                        
+            except Exception as method1_error:
+                print(f"DEBUG: Method 1 failed: {method1_error}")
+            
+            # Method 2: Try with explicit onBehalfOfContentOwner if available
+            if not success:
+                try:
+                    print(f"DEBUG: Method 2 - Attempting with content owner delegation...")
+                    
+                    playlist_body = {
+                        'snippet': {
+                            'title': playlist_name,
+                            'description': description,
+                            'defaultLanguage': 'en'
+                        },
+                        'status': {
+                            'privacyStatus': privacy_status
+                        }
+                    }
+                    
+                    # Try with onBehalfOfContentOwner parameter
+                    request = self.youtube_service.playlists().insert(
+                        part='snippet,status',
+                        body=playlist_body,
+                        onBehalfOfContentOwner=self.selected_channel_id
+                    )
+                    response = request.execute()
+                    playlist_id = response['id']
+                    created_channel_id = response.get('snippet', {}).get('channelId', 'unknown')
+                    
+                    if created_channel_id == self.selected_channel_id:
+                        print(f"✅ SUCCESS: Method 2 worked! Playlist created on correct channel {created_channel_id}")
+                        success = True
+                    else:
+                        print(f"⚠️ Method 2: Playlist created on {created_channel_id} instead of {self.selected_channel_id}")
+                        
+                except Exception as method2_error:
+                    print(f"DEBUG: Method 2 failed: {method2_error}")
+            
+            # Method 3: Try channel impersonation through re-authentication
+            if not success:
+                try:
+                    print(f"DEBUG: Method 3 - Attempting channel impersonation...")
+                    
+                    # Try to re-authenticate specifically for the Brand Account
+                    brand_service = self._authenticate_for_channel(self.selected_channel_id)
+                    
+                    if brand_service:
+                        playlist_body = {
+                            'snippet': {
+                                'title': playlist_name,
+                                'description': description,
+                                'defaultLanguage': 'en'
+                            },
+                            'status': {
+                                'privacyStatus': privacy_status
+                            }
+                        }
+                        
+                        request = brand_service.playlists().insert(
+                            part='snippet,status',
+                            body=playlist_body
+                        )
+                        response = request.execute()
+                        playlist_id = response['id']
+                        created_channel_id = response.get('snippet', {}).get('channelId', 'unknown')
+                        
+                        if created_channel_id == self.selected_channel_id:
+                            print(f"✅ SUCCESS: Method 3 worked! Playlist created on correct channel {created_channel_id}")
+                            success = True
+                            # Update the main service to use the Brand Account context
+                            self.youtube_service = brand_service
+                        else:
+                            print(f"⚠️ Method 3: Playlist created on {created_channel_id} instead of {self.selected_channel_id}")
+                            
+                except Exception as method3_error:
+                    print(f"DEBUG: Method 3 failed: {method3_error}")
+            
+            # Method 4: Standard fallback (what was working before)
+            if not success and not playlist_id:
+                print(f"DEBUG: Method 4 - Standard fallback creation...")
+                playlist_body = {
+                    'snippet': {
+                        'title': playlist_name,
+                        'description': description,
+                        'defaultLanguage': 'en'
+                    },
+                    'status': {
+                        'privacyStatus': privacy_status
+                    }
+                }
+                
+                request = self.youtube_service.playlists().insert(
+                    part='snippet,status',
+                    body=playlist_body
+                )
+                response = request.execute()
+                playlist_id = response['id']
+                created_channel_id = response.get('snippet', {}).get('channelId', 'unknown')
+                print(f"DEBUG: Fallback method created playlist on channel: {created_channel_id}")
+            
+            if playlist_id:
+                print(f"DEBUG: Successfully created playlist '{playlist_name}' with ID: {playlist_id}")
+                return playlist_id
+            else:
+                print(f"ERROR: All methods failed to create playlist")
+                return None
+            
+        except Exception as e:
+            print(f"ERROR: Failed to create playlist: {e}")
+            print(f"This might be due to insufficient permissions for Brand Account management")
+            return None
+
+    def _build_channel_specific_service(self, channel_id):
+        """Try to build a YouTube service specifically for the given channel"""
+        try:
+            # This is a placeholder - in practice, we'd need channel-specific credentials
+            print(f"DEBUG: Attempting to build service for channel {channel_id}")
+            # For now, return None as this requires advanced credential management
+            return None
+        except Exception as e:
+            print(f"DEBUG: Channel-specific service building failed: {e}")
+            return None
+
+    def _authenticate_for_channel(self, channel_id):
+        """Try to authenticate specifically for a Brand Account channel"""
+        try:
+            print(f"DEBUG: Attempting Brand Account authentication for {channel_id}")
+            
+            # Get the channel info to determine if this is a Brand Account
+            channel_info = None
+            if hasattr(self, 'youtube_channels'):
+                channel_info = next((ch for ch in self.youtube_channels if ch['id'] == channel_id), None)
+            
+            if not channel_info:
+                print(f"DEBUG: No channel info found for {channel_id}")
+                return None
+            
+            # For Brand Accounts, we might need to prompt user to switch context in browser
+            # This is a complex process that usually requires manual intervention
+            print(f"DEBUG: Channel '{channel_info.get('title', 'Unknown')}' requires Brand Account context")
+            print(f"DEBUG: Current YouTube API limitations prevent automatic Brand Account switching")
+            
+            return None
+            
+        except Exception as e:
+            print(f"DEBUG: Brand Account authentication failed: {e}")
+            return None
+
+    def _show_brand_account_workaround_dialog(self, playlist_name, parent_dialog):
+        """Show a dialog with instructions for creating Brand Account playlists manually"""
+        # Create workaround dialog
+        workaround_dialog = tk.Toplevel(self.root)
+        workaround_dialog.title("Brand Account Playlist - Manual Creation Required")
+        workaround_dialog.geometry("600x500")
+        workaround_dialog.transient(parent_dialog)
+        workaround_dialog.grab_set()
+        
+        # Center the dialog
+        workaround_dialog.update_idletasks()
+        x = (workaround_dialog.winfo_screenwidth() // 2) - (workaround_dialog.winfo_width() // 2)
+        y = (workaround_dialog.winfo_screenheight() // 2) - (workaround_dialog.winfo_height() // 2)
+        workaround_dialog.geometry(f"+{x}+{y}")
+        
+        main_frame = ttk.Frame(workaround_dialog, padding="20")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        workaround_dialog.columnconfigure(0, weight=1)
+        workaround_dialog.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(0, weight=1)
+        
+        # Title
+        title_label = ttk.Label(main_frame, 
+                               text="YouTube API Limitation - Manual Playlist Creation", 
+                               font=("TkDefaultFont", 14, "bold"))
+        title_label.grid(row=0, column=0, pady=(0, 20), sticky=tk.W)
+        
+        # Explanation
+        explanation = tk.Text(main_frame, height=15, width=70, wrap=tk.WORD)
+        explanation.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 20))
+        
+        # Get selected channel name
+        selected_channel_name = "Vintage Postcard Archive"
+        if hasattr(self, 'youtube_channels') and hasattr(self, 'selected_channel_id'):
+            selected_channel = next((ch for ch in self.youtube_channels if ch['id'] == self.selected_channel_id), None)
+            if selected_channel:
+                selected_channel_name = selected_channel['title']
+        
+        explanation_text = f"""Due to YouTube API limitations, playlists cannot be created directly on Brand Account channels ("{selected_channel_name}") through third-party applications.
+
+The playlist "{playlist_name}" was created on your personal channel instead.
+
+IMPORTANT: Brand Account playlists must be set to "Public" visibility to appear in this app. The YouTube API only returns public playlists for Brand Account channels when accessed by third-party applications.
+
+SOLUTION - Create Playlist Manually on Brand Account:
+
+1. Open YouTube Studio in your web browser:
+   https://studio.youtube.com
+
+2. Make sure you're switched to "{selected_channel_name}":
+   • Click on your profile picture (top right)
+   • If it shows your personal account, click "Switch account"
+   • Select "{selected_channel_name}"
+
+3. Create the playlist:
+   • Go to "Content" → "Playlists" (left sidebar)
+   • Click "NEW PLAYLIST" button
+   • Name: "{playlist_name}"
+   • Visibility: "Public" (REQUIRED for Brand Account playlists to appear in this app)
+   • Click "CREATE"
+
+4. Return to this application:
+   • Click "Refresh Playlists" button
+   • Your new playlist should now appear in the dropdown
+
+ALTERNATIVE - Use Existing Playlist:
+If you already have a playlist on "{selected_channel_name}" that you want to use, simply select it from the dropdown after clicking "Refresh Playlists".
+
+The app will work perfectly once the playlist exists on the correct channel!"""
+
+        explanation.insert(tk.END, explanation_text)
+        explanation.configure(state='disabled')
+        
+        # Scrollbar for explanation
+        explanation_scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=explanation.yview)
+        explanation_scrollbar.grid(row=1, column=1, sticky=(tk.N, tk.S))
+        explanation.configure(yscrollcommand=explanation_scrollbar.set)
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=2, column=0, pady=(20, 0))
+        
+        def open_youtube_studio():
+            import webbrowser
+            webbrowser.open("https://studio.youtube.com")
+        
+        def refresh_and_close():
+            self.refresh_playlists()
+            workaround_dialog.destroy()
+            parent_dialog.destroy()
+        
+        def close_dialog():
+            workaround_dialog.destroy()
+            parent_dialog.destroy()
+        
+        ttk.Button(button_frame, text="Open YouTube Studio", command=open_youtube_studio).grid(row=0, column=0, padx=(0, 10))
+        ttk.Button(button_frame, text="Refresh Playlists", command=refresh_and_close).grid(row=0, column=1, padx=(0, 10))
+        ttk.Button(button_frame, text="Close", command=close_dialog).grid(row=0, column=2)
 
     def create_playlist(self, playlist_name, channel_name):
         """Create a new playlist under the selected channel"""
@@ -7107,6 +7902,104 @@ class PostcardVideoCreator:
             if 'path' in part_info and os.path.exists(part_info['path']):
                 self.add_video_to_list(part_info['path'])
 
+    def on_video_selection_changed(self, event):
+        """Handle video selection change to update title and description preview"""
+        selected_items = self.video_tree.selection()
+        
+        if selected_items:
+            # Get the selected video
+            selected_item = selected_items[0]
+            file_path = self.video_tree.item(selected_item)['values'][0]
+            
+            if file_path:
+                # Generate the formatted title for this specific video
+                filename = os.path.splitext(os.path.basename(file_path))[0]
+                formatted_filename = self._format_filename_for_title(filename)
+                title = f"{formatted_filename} Vintage Postcards"
+                
+                # Update title preview
+                self.title_preview_var.set(title)
+                
+                # Update description with the actual title
+                self._update_description_for_title(title)
+            else:
+                self.title_preview_var.set("(Invalid file path)")
+                self._update_description_for_title("(No title)")
+        else:
+            # No selection - show default state
+            children = self.video_tree.get_children()
+            if children:
+                self.title_preview_var.set("(Select a video to preview)")
+                self._reset_description_template()
+            else:
+                self.title_preview_var.set("(No videos selected)")
+                self._reset_description_template()
+
+    def _update_description_for_title(self, title):
+        """Update the description text with the specific title"""
+        if hasattr(self, 'description_text'):
+            # Get the template
+            template = """{title}
+
+#VintagePostcards #PostcardCollecting #AntiquePostcards
+
+Discover the charm of vintage postcards from around the world! Subscribe for weekly videos showcasing rare and beautiful postcards from our collection at Lincoln Rare Books and Collectables. Our online store boasts one of the largest vintage postcard selections, with tens of thousands available for purchase. This channel features just a glimpse of our inventory—perfect for postcard collecting enthusiasts!
+
+🔗 Postcard Department: https://tiny.cc/z0ir001
+
+🔗 Full Store: https://tiny.cc/w0ir001
+
+We add ~1,000 new antique postcards to our store weekly. Follow our eBay store for exclusive updates, special offers, and discounts to grow your postcard collection! Share your favorite postcard stories in the comments—we love hearing from fellow collectors!
+
+#VintageEphemera #LincolnRareBooks"""
+            
+            # Replace {title} with actual title
+            formatted_description = template.replace("{title}", title)
+            
+            # Update the description text area
+            self.description_text.delete('1.0', tk.END)
+            self.description_text.insert('1.0', formatted_description)
+
+    def _reset_description_template(self):
+        """Reset description to show template format"""
+        if hasattr(self, 'description_text'):
+            template = """{title}
+
+#VintagePostcards #PostcardCollecting #AntiquePostcards
+
+Discover the charm of vintage postcards from around the world! Subscribe for weekly videos showcasing rare and beautiful postcards from our collection at Lincoln Rare Books and Collectables. Our online store boasts one of the largest vintage postcard selections, with tens of thousands available for purchase. This channel features just a glimpse of our inventory—perfect for postcard collecting enthusiasts!
+
+🔗 Postcard Department: https://tiny.cc/z0ir001
+
+🔗 Full Store: https://tiny.cc/w0ir001
+
+We add ~1,000 new antique postcards to our store weekly. Follow our eBay store for exclusive updates, special offers, and discounts to grow your postcard collection! Share your favorite postcard stories in the comments—we love hearing from fellow collectors!
+
+#VintageEphemera #LincolnRareBooks"""
+            
+            self.description_text.delete('1.0', tk.END)
+            self.description_text.insert('1.0', template)
+
+    def update_title_preview(self):
+        """Update the title preview based on the first video in the list (fallback)"""
+        if not hasattr(self, 'video_tree') or not hasattr(self, 'title_preview_var'):
+            return
+        
+        # Check if there's a selection first
+        selected_items = self.video_tree.selection()
+        if selected_items:
+            # There's a selection, let the selection handler manage it
+            return
+        
+        # No selection - show first video or default state
+        children = self.video_tree.get_children()
+        if children:
+            self.title_preview_var.set("(Select a video to preview)")
+            self._reset_description_template()
+        else:
+            self.title_preview_var.set("(No videos selected)")
+            self._reset_description_template()
+
     def add_video_to_list(self, file_path):
         """Add a single video to the upload list"""
         try:
@@ -7119,21 +8012,11 @@ class PostcardVideoCreator:
             size_mb = os.path.getsize(file_path) / (1024 * 1024)
             filename = os.path.basename(file_path)
             
-            # Add to original tree (might not be visible)
+            # Add to video tree
             self.video_tree.insert('', 'end', values=(file_path, f"{size_mb:.1f}", "Ready"))
             
-            # ALSO add to temporary tree (should be visible)
-            if hasattr(self, 'temp_video_tree'):
-                # Check if already in temp list
-                temp_exists = False
-                for item in self.temp_video_tree.get_children():
-                    if self.temp_video_tree.item(item)['values'][0] == filename:
-                        temp_exists = True
-                        break
-                
-                if not temp_exists:
-                    self.temp_video_tree.insert('', 'end', values=(filename, f"{size_mb:.1f}", "Ready"))
-                    print(f"DEBUG: Added {filename} to temporary video list")
+            # Update title preview
+            self.update_title_preview()
             
             # Enable upload button if we have videos
             if hasattr(self, 'upload_button'):
@@ -7149,11 +8032,15 @@ class PostcardVideoCreator:
         selected_items = self.video_tree.selection()
         for item in selected_items:
             self.video_tree.delete(item)
+        # Update title preview after removal
+        self.update_title_preview()
 
     def clear_video_list(self):
         """Clear all videos from upload list"""
         for item in self.video_tree.get_children():
             self.video_tree.delete(item)
+        # Update title preview after clearing
+        self.update_title_preview()
 
     def start_youtube_upload(self):
         """Start uploading videos to YouTube"""
@@ -7194,7 +8081,7 @@ class PostcardVideoCreator:
         privacy = self.privacy_var.get()
         playlist_name = self.playlist_var.get().strip()
         playlist_id = self.playlist_mapping.get(playlist_name) if hasattr(self, 'playlist_mapping') else None
-        title_template = self.title_template_var.get()
+        title_template = "{filename} Vintage Postcards"  # Fixed template
         description = self.description_text.get('1.0', 'end-1c')
         
         # Debug playlist creation logic
@@ -7264,12 +8151,16 @@ class PostcardVideoCreator:
                                  self.video_tree.item(item)['values'][1], "Uploading...")))
                 
                 try:
-                    # Generate title from template
+                    # Generate title from template with formatted filename
                     filename = os.path.splitext(os.path.basename(file_path))[0]
-                    title = title_template.replace("{filename}", filename)
+                    formatted_filename = self._format_filename_for_title(filename)
+                    title = title_template.replace("{filename}", formatted_filename)
+                    
+                    # Generate description with title replacement
+                    formatted_description = description.replace("{title}", title)
                     
                     # Upload video
-                    video_id = self.upload_single_video(file_path, title, description, privacy)
+                    video_id = self.upload_single_video(file_path, title, formatted_description, privacy)
                     
                     if video_id:
                         # Add to playlist if specified
@@ -7344,6 +8235,165 @@ class PostcardVideoCreator:
         except Exception as e:
             print(f"Upload error: {e}")
             return None
+
+    def _write_duration_analysis(self, clips, video_type):
+        """Write detailed duration analysis to log file and console"""
+        import datetime
+        
+        # Create duration analysis log file
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_filename = f"duration_analysis_{timestamp}.txt"
+        log_path = os.path.join(os.getcwd(), log_filename)
+        
+        total_calculated_duration = 0
+        analysis_lines = []
+        
+        # Header
+        header = f"DURATION ANALYSIS - {video_type}"
+        separator = "=" * 60
+        analysis_lines.append(separator)
+        analysis_lines.append(header)
+        analysis_lines.append(separator)
+        
+        # Analyze each clip
+        for idx, clip in enumerate(clips):
+            clip_duration = getattr(clip, 'duration', 0)
+            total_calculated_duration += clip_duration
+            
+            clip_type = "unknown"
+            if hasattr(clip, 'filename') and clip.filename:
+                clip_type = f"IMAGE: {os.path.basename(clip.filename)}"
+            elif hasattr(clip, 'make_frame'):
+                clip_type = "TRANSITION/CUSTOM"
+            else:
+                clip_type = "GENERATED"
+            
+            # More specific identification
+            if idx == 0:
+                clip_type = "START CLIP"
+            elif idx == 1 and self.second_page_enabled_var.get():
+                clip_type = "SECOND PAGE"
+            elif idx == len(clips) - 1:
+                clip_type = "ENDING CLIP"
+            
+            clip_line = f"Clip {idx+1}: {clip_type} = {clip_duration:.2f}s"
+            analysis_lines.append(clip_line)
+        
+        analysis_lines.append("")
+        analysis_lines.append(f"TOTAL CALCULATED: {total_calculated_duration:.2f}s")
+        analysis_lines.append(separator)
+        
+        # Write to console
+        for line in analysis_lines:
+            print(line)
+        
+        # Concatenate clips
+        final_video = concatenate_videoclips(clips, method="compose")
+        print(f"DEBUG: Clips concatenated successfully")
+        
+        # Final duration comparison
+        actual_final_duration = final_video.duration
+        comparison_lines = []
+        comparison_lines.append("")
+        comparison_lines.append(f"FINAL VIDEO DURATION: {actual_final_duration:.2f}s")
+        comparison_lines.append(f"CALCULATED vs ACTUAL: {total_calculated_duration:.2f}s vs {actual_final_duration:.2f}s")
+        
+        if abs(actual_final_duration - total_calculated_duration) > 0.1:
+            mismatch_line = f"⚠️  DURATION MISMATCH: {actual_final_duration - total_calculated_duration:.2f}s difference!"
+            comparison_lines.append(mismatch_line)
+        else:
+            comparison_lines.append("✅ DURATION MATCH")
+        
+        comparison_lines.append(separator)
+        
+        # Write comparison to console
+        for line in comparison_lines:
+            print(line)
+        
+        # Write everything to log file
+        try:
+            with open(log_path, 'w', encoding='utf-8') as f:
+                f.write(f"Timestamp: {datetime.datetime.now()}\n")
+                f.write(f"Video Type: {video_type}\n")
+                f.write("\n")
+                
+                for line in analysis_lines:
+                    f.write(line + "\n")
+                
+                for line in comparison_lines:
+                    f.write(line + "\n")
+                
+                # Configuration debugging info
+                f.write("\nCONFIGURATION VALUES:\n")
+                f.write("=" * 40 + "\n")
+                f.write(f"actual_start_duration_var: {self.actual_start_duration_var.get()}s\n")
+                f.write(f"actual_second_page_duration_var: {self.actual_second_page_duration_var.get()}s\n")
+                f.write(f"actual_ending_duration_var: {self.actual_ending_duration_var.get()}s\n")
+                f.write(f"actual_pair_duration_var: {self.actual_pair_duration_var.get()}s\n")
+                f.write(f"transition_duration_var: {self.transition_duration_var.get()}s\n")
+                f.write(f"second_page_enabled: {self.second_page_enabled_var.get()}\n")
+                
+                # Pair calculation breakdown
+                if hasattr(self, 'actual_pair_duration_var'):
+                    total_pair_duration = self.actual_pair_duration_var.get()
+                    transition_duration = float(self.transition_duration_var.get())
+                    content_duration = total_pair_duration - transition_duration
+                    front_duration = content_duration * 0.6
+                    back_duration = content_duration * 0.4
+                    f.write(f"\nPAIR CALCULATION BREAKDOWN:\n")
+                    f.write(f"  Total pair duration: {total_pair_duration}s\n")
+                    f.write(f"  Transition duration: {transition_duration}s\n")
+                    f.write(f"  Content duration: {content_duration}s\n")
+                    f.write(f"  Calculated front: {front_duration}s\n")
+                    f.write(f"  Calculated back: {back_duration}s\n")
+                
+                # Additional debugging info
+                f.write("\nDETAILED CLIP INFORMATION:\n")
+                f.write("=" * 40 + "\n")
+                for idx, clip in enumerate(clips):
+                    f.write(f"\nClip {idx+1}:\n")
+                    f.write(f"  Duration: {getattr(clip, 'duration', 'unknown')}\n")
+                    f.write(f"  Type: {type(clip).__name__}\n")
+                    f.write(f"  Has filename: {hasattr(clip, 'filename')}\n")
+                    f.write(f"  Has make_frame: {hasattr(clip, 'make_frame')}\n")
+                    if hasattr(clip, 'filename'):
+                        f.write(f"  Filename: {clip.filename}\n")
+            
+            print(f"\n📊 Duration analysis written to: {log_filename}")
+            print(f"Full path: {log_path}")
+            
+        except Exception as e:
+            print(f"ERROR: Could not write duration analysis log: {e}")
+        
+        return final_video
+
+    def _format_filename_for_title(self, filename):
+        """Format filename for use in video title"""
+        import re
+        
+        # Remove date pattern (YYYYMMDD format)
+        # Matches: 20250815, 20231225, etc.
+        formatted = re.sub(r'\b\d{8}\b', '', filename)
+        
+        # Remove time pattern (HHMMSS format)
+        # Matches: 215850, 123456, etc.
+        formatted = re.sub(r'\b\d{6}\b', '', formatted)
+        
+        # Remove video dimensions (WIDTHxHEIGHT format)
+        # Matches: 1080x1080, 1920x1080, 720x480, etc.
+        formatted = re.sub(r'\b\d+x\d+\b', '', formatted)
+        
+        # Replace underscores with spaces
+        formatted = formatted.replace('_', ' ')
+        
+        # Add space between "Part" and number (case-insensitive)
+        # Matches: Part1, part2, PART3, etc. and replaces with: Part 1, Part 2, Part 3
+        formatted = re.sub(r'\b(part)(\d+)\b', r'\1 \2', formatted, flags=re.IGNORECASE)
+        
+        # Clean up any multiple spaces and leading/trailing whitespace
+        formatted = re.sub(r'\s+', ' ', formatted).strip()
+        
+        return formatted
 
     def add_video_to_playlist(self, video_id, playlist_id):
         """Add an uploaded video to a playlist"""
