@@ -259,6 +259,9 @@ class PostcardVideoCreator:
         
         self.setup_ui()
         
+        # Clean up old files before loading defaults
+        self.cleanup_old_files()
+        
         # Load saved defaults after UI is set up
         self.load_defaults()
         
@@ -4349,6 +4352,104 @@ class PostcardVideoCreator:
                 os.system(f'open "{backup_dir}"' if os.name == 'posix' else f'xdg-open "{backup_dir}"')
         else:
             messagebox.showinfo("No Backups", "No backup folder found. Create a backup first.")
+
+    def cleanup_old_files(self):
+        """Clean up log files and duration analysis files older than 24 hours"""
+        import os
+        import time
+        import glob
+        
+        current_time = time.time()
+        files_cleaned = 0
+        
+        # Patterns for files to clean up
+        patterns = [
+            "*.log",
+            "duration_analysis_*.txt",
+            "logs/*.log",
+            "logs/*.txt"
+        ]
+        
+        try:
+            for pattern in patterns:
+                for file_path in glob.glob(pattern):
+                    try:
+                        # Get file modification time
+                        file_mtime = os.path.getmtime(file_path)
+                        
+                        # Check if file is older than 24 hours (86400 seconds)
+                        if current_time - file_mtime > 86400:
+                            os.remove(file_path)
+                            files_cleaned += 1
+                            print(f"Cleaned up old file: {file_path}")
+                    except (OSError, IOError) as e:
+                        # Skip files that can't be accessed or deleted
+                        print(f"Could not clean up {file_path}: {e}")
+            
+            if files_cleaned > 0:
+                print(f"✅ Cleaned up {files_cleaned} old log/analysis files (older than 24 hours)")
+            else:
+                print("✅ No old files to clean up")
+                
+        except Exception as e:
+            print(f"Warning: File cleanup failed: {e}")
+            # Don't let cleanup errors prevent app startup
+
+    def manual_cleanup_old_files(self):
+        """Manually clean up old files with user confirmation"""
+        import os
+        import time
+        import glob
+        from tkinter import messagebox
+        
+        current_time = time.time()
+        old_files = []
+        
+        # Patterns for files to clean up
+        patterns = [
+            "*.log",
+            "duration_analysis_*.txt",
+            "logs/*.log",
+            "logs/*.txt"
+        ]
+        
+        try:
+            for pattern in patterns:
+                for file_path in glob.glob(pattern):
+                    try:
+                        # Get file modification time
+                        file_mtime = os.path.getmtime(file_path)
+                        
+                        # Check if file is older than 24 hours (86400 seconds)
+                        if current_time - file_mtime > 86400:
+                            # Get file age in hours
+                            age_hours = (current_time - file_mtime) / 3600
+                            old_files.append((file_path, age_hours))
+                    except (OSError, IOError):
+                        # Skip files that can't be accessed
+                        continue
+            
+            if not old_files:
+                messagebox.showinfo("File Cleanup", "No old log or analysis files found (older than 24 hours).")
+                return
+            
+            # Show confirmation dialog
+            file_list = "\n".join([f"• {path} ({age:.1f} hours old)" for path, age in old_files])
+            message = f"Found {len(old_files)} old files to clean up:\n\n{file_list}\n\nDelete these files?"
+            
+            if messagebox.askyesno("Cleanup Old Files", message):
+                deleted_count = 0
+                for file_path, _ in old_files:
+                    try:
+                        os.remove(file_path)
+                        deleted_count += 1
+                    except (OSError, IOError) as e:
+                        print(f"Could not delete {file_path}: {e}")
+                
+                messagebox.showinfo("Cleanup Complete", f"Successfully deleted {deleted_count} old files.")
+                
+        except Exception as e:
+            messagebox.showerror("Cleanup Error", f"File cleanup failed: {e}")
 
     def restore_backup_dialog(self):
         """Show dialog to select and restore a backup"""
