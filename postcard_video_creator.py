@@ -1698,6 +1698,53 @@ class PostcardVideoCreator:
         
         self._batching_debug_info += f" | Batches: {', '.join(batch_info)}"
         
+        # CRITICAL VALIDATION: Reject any batch distribution that contains violations
+        violation_found = False
+        for i, batch in enumerate(batches):
+            pairs_count = len(batch) // 2
+            batch_duration = sum(pair_durations[j] for j in range(len(batch) // 2) if j < len(pair_durations))
+            estimated_total_duration = overhead_duration + batch_duration
+            if estimated_total_duration > max_total_video_duration:
+                violation_found = True
+                print(f"🚨 REJECTING BATCH DISTRIBUTION: Batch {i+1} with {pairs_count} pairs would be {estimated_total_duration:.1f}s > {max_total_video_duration:.0f}s limit")
+                break
+        
+        if violation_found:
+            print(f"🔄 FORCING STRICTER DISTRIBUTION: Reducing pairs per batch to ensure no violations")
+            # Force a more conservative distribution by reducing max pairs per batch
+            safe_pairs_per_batch = int(max_duration_per_video / self.actual_pair_duration_var.get())
+            print(f"🔧 Safe pairs per batch: {safe_pairs_per_batch} (based on {max_duration_per_video:.1f}s available ÷ {self.actual_pair_duration_var.get()}s per pair)")
+            
+            # Create new conservative batches
+            total_pairs = len(pair_durations)
+            conservative_batches = []
+            start_idx = 0
+            
+            while start_idx < len(included_indices):
+                end_idx = min(start_idx + safe_pairs_per_batch * 2, len(included_indices))
+                batch = included_indices[start_idx:end_idx]
+                if batch:  # Only add non-empty batches
+                    conservative_batches.append(batch)
+                start_idx = end_idx
+            
+            # Verify the conservative batches
+            print(f"🔍 VERIFYING CONSERVATIVE BATCHES:")
+            all_safe = True
+            for i, batch in enumerate(conservative_batches):
+                pairs_count = len(batch) // 2
+                batch_duration = pairs_count * self.actual_pair_duration_var.get()
+                estimated_total_duration = overhead_duration + batch_duration
+                safe_status = "✅ SAFE" if estimated_total_duration <= max_total_video_duration else "❌ STILL EXCEEDS"
+                print(f"   Conservative Batch {i+1}: {pairs_count} pairs = {estimated_total_duration:.1f}s {safe_status}")
+                if estimated_total_duration > max_total_video_duration:
+                    all_safe = False
+            
+            if all_safe:
+                batches = conservative_batches
+                self._batching_debug_info += f" | CORRECTED to conservative distribution"
+            else:
+                raise ValueError(f"Cannot create valid batches: even single pairs would exceed {max_total_video_duration:.0f}s limit with {overhead_duration:.1f}s overhead")
+        
         return batches
     
     def _create_balanced_batches(self, included_indices, pair_durations, max_duration_per_video, min_pairs_per_video):
