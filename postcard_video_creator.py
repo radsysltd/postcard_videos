@@ -1520,6 +1520,7 @@ class PostcardVideoCreator:
     
     def calculate_video_batches(self):
         """Split included postcards into batches to ensure total video duration ≤ 60 seconds (for royalty-free music)"""
+        print("🚨 DEBUG: calculate_video_batches() called - NEW FADE LOGIC ACTIVE 🚨")
         # Calculate overhead from start/second page/ending clips using CONFIGURABLE durations
         # Calculate ACTUAL start duration including fade effects
         base_start_duration = self.actual_start_duration_var.get()
@@ -1567,11 +1568,12 @@ class PostcardVideoCreator:
         
         overhead_duration = start_duration + second_page_duration + ending_duration
         
-        print(f"DEBUG: ACTUAL durations (including fade effects) - Start: {start_duration:.1f}s, Second Page: {second_page_duration:.1f}s, Ending: {ending_duration:.1f}s")
-        print(f"DEBUG: Total overhead: {overhead_duration:.1f}s")
-        
         # Maximum total video duration (configurable)
         max_total_video_duration = self.max_video_duration_var.get()
+        
+        print(f"🔥 FADE CALCULATION RESULTS: Start: {start_duration:.1f}s, Second Page: {second_page_duration:.1f}s, Ending: {ending_duration:.1f}s")
+        print(f"🔥 TOTAL OVERHEAD: {overhead_duration:.1f}s (was 13.0s before fade fixes)")
+        print(f"🔥 AVAILABLE FOR PAIRS: {max_total_video_duration - overhead_duration:.1f}s")
         print(f"DEBUG: Using max video duration: {max_total_video_duration}s")
         
         # Calculate maximum duration available for postcard content
@@ -1673,9 +1675,13 @@ class PostcardVideoCreator:
             logging.info(f"BATCHING: After adjustment: {len(batches)} batches")
         
         # Log the final batching decision
+        print(f"🎯 FINAL BATCH DISTRIBUTION:")
         for i, batch in enumerate(batches):
             pairs_count = len(batch) // 2
             batch_duration = sum(pair_durations[j] for j in range(len(batch) // 2) if j < len(pair_durations))
+            estimated_total_duration = overhead_duration + batch_duration
+            violation_status = "❌ EXCEEDS LIMIT" if estimated_total_duration > max_total_video_duration else "✅ OK"
+            print(f"   Batch {i+1}: {pairs_count} pairs ({batch_duration:.1f}s) + overhead ({overhead_duration:.1f}s) = {estimated_total_duration:.1f}s {violation_status}")
             logging.info(f"DEBUG: Batch {i+1}: {pairs_count} pairs, {batch_duration:.1f}s duration")
         
         return batches
