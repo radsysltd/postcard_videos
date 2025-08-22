@@ -8329,21 +8329,28 @@ The app will work perfectly once the playlist exists on the correct channel!"""
 
     def on_video_selection_changed(self, event):
         """Handle video selection change to update title and description preview"""
+        print(f"🎯 DEBUG: on_video_selection_changed called!")
         selected_items = self.video_tree.selection()
+        print(f"🎯 DEBUG: Selected items: {selected_items}")
         
         if selected_items:
             # Get the selected video
             selected_item = selected_items[0]
             file_path = self.video_tree.item(selected_item)['values'][0]
+            print(f"🎯 DEBUG: File path from tree: '{file_path}'")
             
             if file_path:
                 # Generate the formatted title for this specific video
                 filename = os.path.splitext(os.path.basename(file_path))[0]
+                print(f"🎯 DEBUG: Raw filename: '{filename}'")
                 formatted_filename = self._format_filename_for_title(filename)
+                print(f"🎯 DEBUG: Formatted filename: '{formatted_filename}'")
                 title = f"{formatted_filename} Vintage Postcards"
+                print(f"🎯 DEBUG: Final title: '{title}'")
                 
                 # Update title preview
                 self.title_preview_var.set(title)
+                print(f"🎯 DEBUG: Title preview updated!")
                 
                 # Update description with the actual title
                 self._update_description_for_title(title)
@@ -8808,26 +8815,34 @@ We add ~1,000 new antique postcards to our store weekly. Follow our eBay store f
         """Format filename for use in video title"""
         import re
         
+        print(f"🔍 DEBUG: _format_filename_for_title called with: '{filename}'")
+        
         # Start with the original filename
         formatted = filename
         
         # Remove date pattern (YYYYMMDD)
         formatted = re.sub(r'\b\d{8}\b', '', formatted)
+        print(f"🔍 DEBUG: After removing date: '{formatted}'")
         
         # Remove time pattern (HHMMSS)  
         formatted = re.sub(r'\b\d{6}\b', '', formatted)
+        print(f"🔍 DEBUG: After removing time: '{formatted}'")
         
         # Remove dimensions pattern (WIDTHxHEIGHT)
         formatted = re.sub(r'\b\d+x\d+\b', '', formatted)
+        print(f"🔍 DEBUG: After removing dimensions: '{formatted}'")
         
         # Replace underscores with spaces
         formatted = formatted.replace('_', ' ')
+        print(f"🔍 DEBUG: After replacing underscores: '{formatted}'")
         
         # Replace "Part" with "#" (case insensitive, with or without space)
         formatted = re.sub(r'\b(part)\s*(\d+)\b', r'#\2', formatted, flags=re.IGNORECASE)
+        print(f"🔍 DEBUG: After replacing Part: '{formatted}'")
         
         # Clean up multiple spaces and trim
         formatted = re.sub(r'\s+', ' ', formatted).strip()
+        print(f"🔍 DEBUG: Final formatted result: '{formatted}'")
         
         return formatted
 
