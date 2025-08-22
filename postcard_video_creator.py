@@ -537,7 +537,7 @@ class PostcardVideoCreator:
         self.test_button.grid(row=1, column=5, padx=(10, 0), pady=(5, 0))
         
         # Configure grid weights for proper resizing
-        main_frame.rowconfigure(3, weight=1)
+        main_frame.rowconfigure(2, weight=1)  # File frame should expand, not control frame
         file_frame.columnconfigure(0, weight=1)
         file_frame.rowconfigure(1, weight=1)
         list_frame.columnconfigure(0, weight=1)
