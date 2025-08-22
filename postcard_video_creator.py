@@ -1521,13 +1521,54 @@ class PostcardVideoCreator:
     def calculate_video_batches(self):
         """Split included postcards into batches to ensure total video duration ≤ 60 seconds (for royalty-free music)"""
         # Calculate overhead from start/second page/ending clips using CONFIGURABLE durations
-        start_duration = self.actual_start_duration_var.get()
-        second_page_duration = self.actual_second_page_duration_var.get() if self.second_page_enabled_var.get() else 0
-        ending_duration = self.actual_ending_duration_var.get()
+        # Calculate ACTUAL start duration including fade effects
+        base_start_duration = self.actual_start_duration_var.get()
+        start_fade_extension = 0.0
+        if self.start_fade_in_var.get():
+            start_fade_extension += self.start_fade_in_dur_var.get()
+        if self.start_fade_out_var.get():
+            start_fade_extension += self.start_fade_out_dur_var.get()
+        
+        start_fade_impact = start_fade_extension * 0.75
+        start_duration = base_start_duration + start_fade_impact
+        print(f"DEBUG: Start duration calculation - Base: {base_start_duration}s + Fade impact: {start_fade_impact:.1f}s = Total: {start_duration:.1f}s")
+        
+        # Calculate ACTUAL second page duration including fade effects
+        if self.second_page_enabled_var.get():
+            base_second_page_duration = self.actual_second_page_duration_var.get()
+            
+            # Account for fade effects that may extend duration
+            fade_extension = 0.0
+            if self.second_page_fade_in_var.get():
+                fade_extension += self.second_page_fade_in_dur_var.get()
+            if self.second_page_fade_out_var.get():
+                fade_extension += self.second_page_fade_out_dur_var.get()
+            
+            # The actual duration may be affected by fade effects
+            # MoviePy fade effects can sometimes extend duration slightly
+            # Use a conservative estimate: fade effects add ~75% of their duration
+            fade_impact = fade_extension * 0.75
+            second_page_duration = base_second_page_duration + fade_impact
+            print(f"DEBUG: Second page duration calculation - Base: {base_second_page_duration}s + Fade impact: {fade_impact:.1f}s (from {fade_extension}s effects) = Total: {second_page_duration:.1f}s")
+        else:
+            second_page_duration = 0
+            
+        # Calculate ACTUAL ending duration including fade effects
+        base_ending_duration = self.actual_ending_duration_var.get()
+        ending_fade_extension = 0.0
+        if self.ending_fade_in_var.get():
+            ending_fade_extension += self.ending_fade_in_dur_var.get()
+        if self.ending_fade_out_var.get():
+            ending_fade_extension += self.ending_fade_out_dur_var.get()
+        
+        ending_fade_impact = ending_fade_extension * 0.75
+        ending_duration = base_ending_duration + ending_fade_impact
+        print(f"DEBUG: Ending duration calculation - Base: {base_ending_duration}s + Fade impact: {ending_fade_impact:.1f}s = Total: {ending_duration:.1f}s")
         
         overhead_duration = start_duration + second_page_duration + ending_duration
         
-        print(f"DEBUG: Using CONFIGURED actual durations - Start: {start_duration}s, Second Page: {second_page_duration}s, Ending: {ending_duration}s")
+        print(f"DEBUG: ACTUAL durations (including fade effects) - Start: {start_duration:.1f}s, Second Page: {second_page_duration:.1f}s, Ending: {ending_duration:.1f}s")
+        print(f"DEBUG: Total overhead: {overhead_duration:.1f}s")
         
         # Maximum total video duration (configurable)
         max_total_video_duration = self.max_video_duration_var.get()
