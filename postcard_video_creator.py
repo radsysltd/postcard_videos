@@ -2022,6 +2022,11 @@ class PostcardVideoCreator:
             videos_created = []
             
             for batch_index, batch_indices in enumerate(batches):
+                # Check for cancellation at the start of each batch
+                if not self.is_processing:
+                    print(f"DEBUG: Batch processing cancelled before batch {batch_index + 1}")
+                    break
+                    
                 try:
                     # Update progress
                     overall_progress = (batch_index / total_videos) * 100
@@ -2053,6 +2058,11 @@ class PostcardVideoCreator:
                     video_path = self.process_single_batch_video(batch_indices, actual_part_number, total_videos, original_line1)
                     if video_path:
                         videos_created.append(video_path)
+                    
+                    # Check for cancellation after each video is created
+                    if not self.is_processing:
+                        print(f"DEBUG: Batch processing cancelled after creating batch {batch_index + 1}")
+                        break
                     
                 except Exception as e:
                     logging.error(f"Error creating batch {batch_index + 1}: {e}")
