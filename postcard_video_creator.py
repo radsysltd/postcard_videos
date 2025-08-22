@@ -4320,11 +4320,10 @@ class PostcardVideoCreator:
             # Get the tree item for the first selected image
             target_item = all_items[first_image_index]
             
-            # Scroll to make this item visible and select it for emphasis
+            # Scroll to make this item visible (without selecting it)
             self.tree.see(target_item)
-            self.tree.selection_set(target_item)
             
-            print(f"DEBUG: Auto-scrolled to image {first_image_index + 1}")
+            print(f"DEBUG: Auto-scrolled to image {first_image_index + 1} without changing selection")
         else:
             print(f"DEBUG: Cannot scroll to image {first_image_index + 1} - index out of range")
     
