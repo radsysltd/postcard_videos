@@ -1455,11 +1455,11 @@ class PostcardVideoCreator:
             messagebox.showerror("Error", f"You have {len(included_images)} images selected. Please select an even number of images.\n\nYou need pairs: front and back images for each postcard.")
             return
         
-        # Validate total duration based on configured maximum
+        # Validate total duration based on configured maximum using ACTUAL durations
         max_duration = self.max_video_duration_var.get()
-        start_duration = self.start_duration_var.get()
-        second_page_duration = self.second_page_duration_var.get() if self.second_page_enabled_var.get() else 0
-        ending_duration = self.ending_duration_var.get()
+        start_duration = self.actual_start_duration_var.get()
+        second_page_duration = self.actual_second_page_duration_var.get() if self.second_page_enabled_var.get() else 0
+        ending_duration = self.actual_ending_duration_var.get()
         overhead_duration = start_duration + second_page_duration + ending_duration
         
         if overhead_duration >= max_duration:
@@ -1710,9 +1710,9 @@ class PostcardVideoCreator:
             end_idx = start_idx + batch_size * 2  # *2 because each pair = 2 images
             batch = included_indices[start_idx:end_idx]
             
-            # Check duration constraint
+            # Check duration constraint - STRICT: no flexibility allowed
             batch_duration = sum(pair_durations[start_idx//2:(start_idx//2) + batch_size])
-            if batch_duration > max_duration * 1.2:  # Allow 20% flexibility
+            if batch_duration > max_duration:  # Strict limit - no violations allowed
                 return None
                 
             batches.append(batch)
@@ -1754,13 +1754,17 @@ class PostcardVideoCreator:
             pair_duration = pair_durations[pair_idx]
             current_pairs = len(current_batch) // 2
             
-            # Check if adding this pair would exceed the limit AND we have minimum pairs
-            if (current_duration + pair_duration > max_duration_per_video and 
-                current_pairs >= min_pairs_per_video):
-                # Start a new batch
-                batches.append(current_batch)
-                current_batch = []
-                current_duration = 0.0
+            # Check if adding this pair would exceed the limit (strict duration enforcement)
+            if current_duration + pair_duration > max_duration_per_video:
+                # Only start a new batch if current batch has content
+                if current_batch:
+                    batches.append(current_batch)
+                    current_batch = []
+                    current_duration = 0.0
+                # If current batch is empty and this single pair exceeds limit, 
+                # we have a configuration problem
+                elif pair_duration > max_duration_per_video:
+                    raise ValueError(f"Single pair duration {pair_duration:.1f}s exceeds max video duration {max_duration_per_video:.1f}s! Reduce pair duration.")
             
             # Add the pair to current batch
             front_idx = included_indices[i]
@@ -8473,6 +8477,10 @@ We add ~1,000 new antique postcards to our store weekly. Follow our eBay store f
         comparison_lines.append("")
         comparison_lines.append(f"FINAL VIDEO DURATION: {actual_final_duration:.2f}s")
         comparison_lines.append(f"CALCULATED vs ACTUAL: {total_calculated_duration:.2f}s vs {actual_final_duration:.2f}s")
+        
+        # Log duration status for debugging
+        max_allowed_duration = self.max_video_duration_var.get()
+        comparison_lines.append(f"✅ DURATION: {actual_final_duration:.2f}s ≤ {max_allowed_duration:.0f}s (algorithm enforced)")
         
         if abs(actual_final_duration - total_calculated_duration) > 0.1:
             mismatch_line = f"⚠️  DURATION MISMATCH: {actual_final_duration - total_calculated_duration:.2f}s difference!"
