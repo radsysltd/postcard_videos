@@ -57,7 +57,7 @@
   "second_page_line2_y": 800,
   "second_page_max_chars": 30,
   "second_page_duration": 8.0,
-  "second_page_line1_color": "#400040",
+  "second_page_line1_color": "#804000",
   "second_page_line2_color": "#804000",
   "second_page_fade_in": true,
   "second_page_fade_out": false,

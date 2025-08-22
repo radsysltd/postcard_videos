@@ -255,6 +255,7 @@ class PostcardVideoCreator:
         self.actual_second_page_duration_var = tk.DoubleVar(value=11.0)
         self.actual_ending_duration_var = tk.DoubleVar(value=8.0)
         self.actual_pair_duration_var = tk.DoubleVar(value=14.1)
+        self.max_video_duration_var = tk.DoubleVar(value=60.0)  # Maximum allowed video duration
         
         self.setup_ui()
         
@@ -370,43 +371,48 @@ class PostcardVideoCreator:
         ttk.Spinbox(settings_frame, from_=5.0, to=30.0, increment=0.1, textvariable=self.actual_pair_duration_var, 
                    width=8).grid(row=5, column=3, sticky=tk.W, pady=(5, 0))
         
+        # Row 6: Max Video Duration
+        ttk.Label(settings_frame, text="Max Video Duration (seconds):").grid(row=6, column=0, sticky=tk.W, padx=(0, 5), pady=(5, 0))
+        ttk.Spinbox(settings_frame, from_=30.0, to=300.0, increment=5.0, textvariable=self.max_video_duration_var, 
+                   width=8).grid(row=6, column=1, sticky=tk.W, padx=(0, 20), pady=(5, 0))
+        
         # Help text (more compact)
-        help_label = ttk.Label(settings_frame, text="ℹ️ Actual durations for 60s batch splitting", 
+        help_label = ttk.Label(settings_frame, text="ℹ️ Actual durations for batch splitting (max duration enforced)", 
                               font=('Arial', 8), foreground='#666666')
-        help_label.grid(row=6, column=0, columnspan=4, sticky=tk.W, pady=(2, 5))
+        help_label.grid(row=7, column=0, columnspan=4, sticky=tk.W, pady=(2, 5))
         
         # Music management button
         music_manage_button = ttk.Button(settings_frame, text="🎼 Manage Music", command=self.open_music_manager)
         music_manage_button.grid(row=2, column=5, sticky=tk.W, pady=(10, 0), padx=(10, 0))
         
-        # Background color for square format (MOVED TO ROW 7)
-        ttk.Label(settings_frame, text="Square Background:").grid(row=7, column=0, sticky=tk.W, pady=(15, 0))
+        # Background color for square format (MOVED TO ROW 8)
+        ttk.Label(settings_frame, text="Square Background:").grid(row=8, column=0, sticky=tk.W, pady=(15, 0))
         background_color_combo = ttk.Combobox(settings_frame, textvariable=self.background_color_var,
                                             values=["white", "black", "gray", "light_gray", "dark_gray", 
                                                    "red", "green", "blue", "yellow", "cyan", "magenta", 
                                                    "orange", "purple", "brown", "pink", "navy"], width=15)
-        background_color_combo.grid(row=7, column=1, sticky=tk.W, pady=(15, 0), padx=(0, 20))
+        background_color_combo.grid(row=8, column=1, sticky=tk.W, pady=(15, 0), padx=(0, 20))
         
-        # Starting part number setting (MOVED TO ROW 7)
-        ttk.Label(settings_frame, text="Starting Part Number:").grid(row=7, column=2, sticky=tk.W, pady=(15, 0), padx=(20, 0))
+        # Starting part number setting (MOVED TO ROW 8)
+        ttk.Label(settings_frame, text="Starting Part Number:").grid(row=8, column=2, sticky=tk.W, pady=(15, 0), padx=(20, 0))
         starting_part_spinbox = ttk.Spinbox(settings_frame, from_=1, to=999, textvariable=self.starting_part_var, width=8)
-        starting_part_spinbox.grid(row=7, column=3, sticky=tk.W, pady=(15, 0), padx=(0, 10))
+        starting_part_spinbox.grid(row=8, column=3, sticky=tk.W, pady=(15, 0), padx=(0, 10))
         
-        # Ending text configuration button (MOVED TO ROW 8)
+        # Ending text configuration button (MOVED TO ROW 9)
         ending_config_button = ttk.Button(settings_frame, text="🎬 Configure Ending Text", command=self.open_ending_config)
-        ending_config_button.grid(row=8, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
+        ending_config_button.grid(row=9, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
         
-        # Start text configuration button (MOVED TO ROW 8)
+        # Start text configuration button (MOVED TO ROW 9)
         start_config_button = ttk.Button(settings_frame, text="🎬 Configure Start Text", command=self.open_start_config)
-        start_config_button.grid(row=8, column=2, columnspan=2, sticky=tk.W, pady=(10, 0))
+        start_config_button.grid(row=9, column=2, columnspan=2, sticky=tk.W, pady=(10, 0))
         
-        # Second page configuration button (MOVED TO ROW 9)
+        # Second page configuration button (MOVED TO ROW 10)
         second_page_config_button = ttk.Button(settings_frame, text="📄 Configure Second Page", command=self.open_second_page_config)
-        second_page_config_button.grid(row=9, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
+        second_page_config_button.grid(row=10, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
         
-        # YouTube upload button (MOVED TO ROW 9)
+        # YouTube upload button (MOVED TO ROW 10)
         youtube_upload_button = ttk.Button(settings_frame, text="📺 Upload to YouTube", command=self.open_youtube_upload)
-        youtube_upload_button.grid(row=9, column=2, columnspan=2, sticky=tk.W, pady=(10, 0))
+        youtube_upload_button.grid(row=10, column=2, columnspan=2, sticky=tk.W, pady=(10, 0))
         
         # File selection frame
         file_frame = ttk.LabelFrame(main_frame, text="Postcard Images", padding="10")
@@ -1449,16 +1455,17 @@ class PostcardVideoCreator:
             messagebox.showerror("Error", f"You have {len(included_images)} images selected. Please select an even number of images.\n\nYou need pairs: front and back images for each postcard.")
             return
         
-        # Validate total duration for royalty-free music compliance (60-second limit)
+        # Validate total duration based on configured maximum
+        max_duration = self.max_video_duration_var.get()
         start_duration = self.start_duration_var.get()
         second_page_duration = self.second_page_duration_var.get() if self.second_page_enabled_var.get() else 0
         ending_duration = self.ending_duration_var.get()
         overhead_duration = start_duration + second_page_duration + ending_duration
         
-        if overhead_duration >= 60.0:
+        if overhead_duration >= max_duration:
             messagebox.showerror("Duration Error", 
                 f"Start/Second Page/Ending clips total {overhead_duration:.1f} seconds.\n\n"
-                f"This exceeds the 60-second limit for royalty-free music!\n\n"
+                f"This exceeds the {max_duration:.0f}-second limit!\n\n"
                 f"Please reduce clip durations in their respective configuration dialogs.")
             return
         
@@ -1522,8 +1529,9 @@ class PostcardVideoCreator:
         
         print(f"DEBUG: Using CONFIGURED actual durations - Start: {start_duration}s, Second Page: {second_page_duration}s, Ending: {ending_duration}s")
         
-        # Maximum total video duration for royalty-free music compliance
-        max_total_video_duration = 60.0
+        # Maximum total video duration (configurable)
+        max_total_video_duration = self.max_video_duration_var.get()
+        print(f"DEBUG: Using max video duration: {max_total_video_duration}s")
         
         # Calculate maximum duration available for postcard content
         max_duration_per_video = max_total_video_duration - overhead_duration
@@ -4385,6 +4393,7 @@ class PostcardVideoCreator:
                 "actual_second_page_duration": self.actual_second_page_duration_var.get(),
                 "actual_ending_duration": self.actual_ending_duration_var.get(),
                 "actual_pair_duration": self.actual_pair_duration_var.get(),
+                "max_video_duration": self.max_video_duration_var.get(),
                 
                 # Fade options
                 "start_fade_in": self.start_fade_in_var.get(),
@@ -5704,6 +5713,7 @@ class PostcardVideoCreator:
                 "actual_second_page_duration": self.actual_second_page_duration_var.get(),
                 "actual_ending_duration": self.actual_ending_duration_var.get(),
                 "actual_pair_duration": self.actual_pair_duration_var.get(),
+                "max_video_duration": self.max_video_duration_var.get(),
                 
                 # Fade options
                 "start_fade_in": self.start_fade_in_var.get(),
@@ -5826,6 +5836,7 @@ class PostcardVideoCreator:
                 self.actual_second_page_duration_var.set(defaults.get("actual_second_page_duration", 11.0))
                 self.actual_ending_duration_var.set(defaults.get("actual_ending_duration", 8.0))
                 self.actual_pair_duration_var.set(defaults.get("actual_pair_duration", 14.1))
+                self.max_video_duration_var.set(defaults.get("max_video_duration", 60.0))
                 
                 self.ending_fade_in_var.set(defaults.get("ending_fade_in", False))
                 self.ending_fade_out_var.set(defaults.get("ending_fade_out", False))
@@ -8495,6 +8506,7 @@ We add ~1,000 new antique postcards to our store weekly. Follow our eBay store f
                 f.write(f"actual_second_page_duration_var: {self.actual_second_page_duration_var.get()}s\n")
                 f.write(f"actual_ending_duration_var: {self.actual_ending_duration_var.get()}s\n")
                 f.write(f"actual_pair_duration_var: {self.actual_pair_duration_var.get()}s\n")
+                f.write(f"max_video_duration_var: {self.max_video_duration_var.get()}s\n")
                 f.write(f"transition_duration_var: {self.transition_duration_var.get()}s\n")
                 f.write(f"second_page_enabled: {self.second_page_enabled_var.get()}\n")
                 
