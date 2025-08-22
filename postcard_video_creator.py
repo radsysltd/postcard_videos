@@ -8808,29 +8808,84 @@ We add ~1,000 new antique postcards to our store weekly. Follow our eBay store f
         """Format filename for use in video title"""
         import re
         
-        # Remove date pattern (YYYYMMDD format)
-        # Matches: 20250815, 20231225, etc.
-        formatted = re.sub(r'\b\d{8}\b', '', filename)
+        # Start with the original filename
+        formatted = filename
         
-        # Remove time pattern (HHMMSS format)
-        # Matches: 215850, 123456, etc.
+        # Remove date pattern (YYYYMMDD)
+        formatted = re.sub(r'\b\d{8}\b', '', formatted)
+        
+        # Remove time pattern (HHMMSS)  
         formatted = re.sub(r'\b\d{6}\b', '', formatted)
         
-        # Remove video dimensions (WIDTHxHEIGHT format)
-        # Matches: 1080x1080, 1920x1080, 720x480, etc.
+        # Remove dimensions pattern (WIDTHxHEIGHT)
         formatted = re.sub(r'\b\d+x\d+\b', '', formatted)
         
         # Replace underscores with spaces
         formatted = formatted.replace('_', ' ')
         
-        # Replace "Part" with "#" without space before number (case-insensitive)
-        # Matches: Part1, part2, PART3, etc. and replaces with: #1, #2, #3
+        # Replace "Part" with "#" (case insensitive, with or without space)
         formatted = re.sub(r'\b(part)\s*(\d+)\b', r'#\2', formatted, flags=re.IGNORECASE)
         
-        # Clean up any multiple spaces and leading/trailing whitespace
+        # Clean up multiple spaces and trim
         formatted = re.sub(r'\s+', ' ', formatted).strip()
         
         return formatted
+
+    def manual_cleanup_old_files(self):
+        """Manually clean up old files with user confirmation"""
+        import os
+        import time
+        import glob
+        from tkinter import messagebox
+        
+        current_time = time.time()
+        old_files = []
+        
+        # Patterns for files to clean up
+        patterns = [
+            "*.log",
+            "duration_analysis_*.txt",
+            "logs/*.log",
+            "logs/*.txt"
+        ]
+        
+        try:
+            for pattern in patterns:
+                for file_path in glob.glob(pattern):
+                    try:
+                        # Get file modification time
+                        file_mtime = os.path.getmtime(file_path)
+                        
+                        # Check if file is older than 24 hours (86400 seconds)
+                        if current_time - file_mtime > 86400:
+                            # Get file age in hours
+                            age_hours = (current_time - file_mtime) / 3600
+                            old_files.append((file_path, age_hours))
+                    except (OSError, IOError):
+                        # Skip files that can't be accessed
+                        continue
+            
+            if not old_files:
+                messagebox.showinfo("File Cleanup", "No old log or analysis files found (older than 24 hours).")
+                return
+            
+            # Show confirmation dialog
+            file_list = "\n".join([f"• {path} ({age:.1f} hours old)" for path, age in old_files])
+            message = f"Found {len(old_files)} old files to clean up:\n\n{file_list}\n\nDelete these files?"
+            
+            if messagebox.askyesno("Cleanup Old Files", message):
+                deleted_count = 0
+                for file_path, _ in old_files:
+                    try:
+                        os.remove(file_path)
+                        deleted_count += 1
+                    except (OSError, IOError) as e:
+                        print(f"Could not delete {file_path}: {e}")
+                
+                messagebox.showinfo("Cleanup Complete", f"Successfully deleted {deleted_count} old files.")
+                
+        except Exception as e:
+            messagebox.showerror("Cleanup Error", f"File cleanup failed: {e}")
 
     def add_video_to_playlist(self, video_id, playlist_id):
         """Add an uploaded video to a playlist"""

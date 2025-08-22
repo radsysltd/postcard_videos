@@ -1,5 +1,5 @@
 {
-  "start_line1": "Mumbai, India",
+  "start_line1": "Paris, France",
   "start_line2": "Vintage Postcard Archive",
   "start_line1_size": 2.3,
   "start_line2_size": 2.5,
@@ -39,6 +39,5 @@
   "ending_line1_font": "Arial",
   "ending_line2_font": "Arial",
   "ending_line3_font": "Arial",
-  "ending_duration": 8.0,
-  "default_youtube_channel_id": "UCgDAZ9kGH98mcoMnPOptXUw"
+  "ending_duration": 8.0
 }
