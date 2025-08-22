@@ -8820,17 +8820,23 @@ We add ~1,000 new antique postcards to our store weekly. Follow our eBay store f
         # Start with the original filename
         formatted = filename
         
-        # Remove date pattern (YYYYMMDD)
-        formatted = re.sub(r'\b\d{8}\b', '', formatted)
+        # Remove date pattern (YYYYMMDD) - with or without word boundaries
+        formatted = re.sub(r'_?\d{8}_?', '_', formatted)
         print(f"🔍 DEBUG: After removing date: '{formatted}'")
         
-        # Remove time pattern (HHMMSS)  
-        formatted = re.sub(r'\b\d{6}\b', '', formatted)
+        # Remove time pattern (HHMMSS) - with or without word boundaries
+        formatted = re.sub(r'_?\d{6}_?', '_', formatted)
         print(f"🔍 DEBUG: After removing time: '{formatted}'")
         
-        # Remove dimensions pattern (WIDTHxHEIGHT)
-        formatted = re.sub(r'\b\d+x\d+\b', '', formatted)
+        # Remove dimensions pattern (WIDTHxHEIGHT) - with or without word boundaries
+        formatted = re.sub(r'_?\d+x\d+_?', '_', formatted)
         print(f"🔍 DEBUG: After removing dimensions: '{formatted}'")
+        
+        # Clean up multiple underscores first
+        formatted = re.sub(r'_+', '_', formatted)
+        
+        # Remove leading/trailing underscores
+        formatted = formatted.strip('_')
         
         # Replace underscores with spaces
         formatted = formatted.replace('_', ' ')
