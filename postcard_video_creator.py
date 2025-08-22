@@ -4284,6 +4284,9 @@ class PostcardVideoCreator:
         # Update the tree display to reflect the new selections
         self.update_tree_checkboxes()
         
+        # Auto-scroll to the first selected image
+        self.scroll_to_first_selected_image(batch_indices)
+        
         # Set the starting part number to this part for regeneration
         self.starting_part_var.set(part_number)
         
@@ -4300,6 +4303,30 @@ class PostcardVideoCreator:
         self.status_label.config(text=f"🎯 Selected Part {part_number}: {pairs_count} pairs ready for regeneration")
         
         print(f"DEBUG: Part {part_number} selected - {pairs_count} image pairs, will regenerate {selected_part_info['filename']}")
+    
+    def scroll_to_first_selected_image(self, batch_indices):
+        """Scroll the tree view to show the first selected image"""
+        if not batch_indices:
+            return
+            
+        # Find the first selected image index
+        first_image_index = min(batch_indices)
+        
+        # Get all tree items
+        all_items = self.tree.get_children()
+        
+        # Make sure we have enough items and the index is valid
+        if first_image_index < len(all_items):
+            # Get the tree item for the first selected image
+            target_item = all_items[first_image_index]
+            
+            # Scroll to make this item visible and select it for emphasis
+            self.tree.see(target_item)
+            self.tree.selection_set(target_item)
+            
+            print(f"DEBUG: Auto-scrolled to image {first_image_index + 1}")
+        else:
+            print(f"DEBUG: Cannot scroll to image {first_image_index + 1} - index out of range")
     
     def update_tree_checkboxes(self):
         """Update the tree display to show current checkbox states"""
