@@ -6980,8 +6980,16 @@ We add ~1,000 new antique postcards to our store weekly. Follow our eBay store f
             # If there are no (valid) credentials available, request authorization
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
-                    creds.refresh(Request())
-                else:
+                    try:
+                        print("🔄 Attempting to refresh expired token...")
+                        creds.refresh(Request())
+                        print("✅ Token refreshed successfully!")
+                    except Exception as refresh_error:
+                        print(f"❌ Token refresh failed: {refresh_error}")
+                        print("🔄 Will request fresh authentication...")
+                        creds = None  # Force fresh auth
+                
+                if not creds or not creds.valid:
                     # Check for client secrets file
                     if not os.path.exists('client_secrets.json'):
                         messagebox.showerror("Missing Credentials", 
@@ -7014,7 +7022,8 @@ We add ~1,000 new antique postcards to our store weekly. Follow our eBay store f
                 
         except Exception as e:
             self.auth_status_label.config(text=f"Authentication error: {str(e)[:50]}...", foreground="red")
-            messagebox.showerror("Authentication Error", f"Failed to authenticate:\n{str(e)}")
+            error_msg = f"Failed to authenticate:\n{str(e)}\n\nIf this persists, try clearing authentication data."
+            messagebox.showerror("Authentication Error", error_msg)
 
     def load_youtube_channels(self):
         """Load all available YouTube channels for the authenticated user"""
